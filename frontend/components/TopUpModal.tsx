@@ -1,17 +1,85 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccount } from 'wagmi';
 import { useUserStore } from '@/store/userStore';
 import { useBtcToUsdcQuote } from '@/hooks/useLifi';
-import { useCreditVault } from '@/hooks/useVault';
+import { useBtcTransaction } from '@/hooks/useBtcTransaction';
 import { SUPPORTED_EVM_CHAINS, SATS_PER_BTC, BTC_PRICE_USD } from '@/types';
 import type { LifiQuoteResponse } from '@/types';
-import { satsToBtc, decodePsbt, type ParsedPsbtData } from '@/lib/lifi';
+import { satsToBtc } from '@/lib/lifi';
+import { getBtcAddressInfo, formatBtcDisplay } from '@/lib/btc';
 
 interface TopUpModalProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+// Minimum BTC amount for quotes
+const MIN_BTC_AMOUNT = 0.0001;
+
+// Error type for better handling
+interface QuoteError {
+  type: 'insufficient_balance' | 'rate_limit' | 'no_route' | 'generic';
+  message: string;
+  suggestion?: string;
+  balance?: number;
+  required?: number;
+}
+
+/**
+ * Parse error from Li.Fi API response to provide user-friendly messages
+ */
+function parseQuoteError(error: Error): QuoteError {
+  const message = error.message.toLowerCase();
+  
+  // Rate limit error (429)
+  if (message.includes('429') || message.includes('rate limit') || message.includes('too many requests')) {
+    return {
+      type: 'rate_limit',
+      message: 'Rate limit exceeded',
+      suggestion: 'Please wait a moment and try again. The bridge API is temporarily busy.',
+    };
+  }
+  
+  // No route found (404 or specific message)
+  if (
+    message.includes('404') || 
+    message.includes('no available quotes') || 
+    message.includes('no route') ||
+    message.includes('no possible route')
+  ) {
+    return {
+      type: 'no_route',
+      message: 'No route available for this trade',
+      suggestion: 'Try adjusting the amount, increasing slippage, or selecting a different destination chain.',
+    };
+  }
+  
+  // Insufficient funds
+  if (message.includes('funds') || message.includes('balance') || message.includes('utxo')) {
+    return {
+      type: 'insufficient_balance',
+      message: 'Insufficient BTC balance',
+      suggestion: 'Your BTC address does not have enough funds for this transaction.',
+    };
+  }
+  
+  // Slippage related
+  if (message.includes('slippage')) {
+    return {
+      type: 'no_route',
+      message: 'Slippage tolerance too low',
+      suggestion: 'Try increasing slippage to 3% or higher for BTC bridges.',
+    };
+  }
+  
+  // Generic error
+  return {
+    type: 'generic',
+    message: error.message || 'Failed to get quote',
+    suggestion: 'Please try again or contact support if the issue persists.',
+  };
 }
 
 export function TopUpModal({ isOpen, onClose }: TopUpModalProps) {
@@ -19,31 +87,108 @@ export function TopUpModal({ isOpen, onClose }: TopUpModalProps) {
   const { btcAddress } = useUserStore();
   
   const [btcAmount, setBtcAmount] = useState('0.01');
-  const [selectedChainId, setSelectedChainId] = useState<number>(SUPPORTED_EVM_CHAINS[1].id); // Default to Arbitrum
-  const [slippage, setSlippage] = useState(0.01); // Default 1% for BTC bridges
+  const [selectedChainId, setSelectedChainId] = useState<number>(SUPPORTED_EVM_CHAINS[1].id);
+  const [slippage, setSlippage] = useState(0.02); // Default 2% for BTC bridges
   const [quote, setQuote] = useState<LifiQuoteResponse | null>(null);
-  const [decodedPsbt, setDecodedPsbt] = useState<ParsedPsbtData | null>(null);
-  const [showDetails, setShowDetails] = useState(false);
+  const [quoteError, setQuoteError] = useState<QuoteError | null>(null);
   
-  // Slippage options
-  const SLIPPAGE_OPTIONS = [
-    { value: 0.005, label: '0.5%' },
-    { value: 0.01, label: '1%' },
-    { value: 0.02, label: '2%' },
-    { value: 0.03, label: '3%' },
-  ];
+  // Balance state
+  const [btcBalance, setBtcBalance] = useState<number | null>(null);
+  const [isCheckingBalance, setIsCheckingBalance] = useState(false);
+  const [balanceWarning, setBalanceWarning] = useState<string | null>(null);
   
   const quoteMutation = useBtcToUsdcQuote();
-  const creditMutation = useCreditVault();
-
-  if (!isOpen) return null;
+  const btcTx = useBtcTransaction();
+  
+  // Store reset function in ref to avoid dependency issues
+  const btcTxResetRef = useRef(btcTx.reset);
+  btcTxResetRef.current = btcTx.reset;
 
   const selectedChain = SUPPORTED_EVM_CHAINS.find(c => c.id === selectedChainId);
-  
+
+  // Check balance when modal opens or BTC address changes
+  useEffect(() => {
+    if (isOpen && btcAddress) {
+      checkBalance();
+    }
+  }, [isOpen, btcAddress]);
+
+  // Reset state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setQuote(null);
+      setQuoteError(null);
+      setBalanceWarning(null);
+      btcTxResetRef.current();
+    }
+  }, [isOpen]);
+
+  // Check balance and update warning when amount changes
+  useEffect(() => {
+    if (btcBalance !== null && btcAmount) {
+      const requiredSats = Math.floor(parseFloat(btcAmount || '0') * SATS_PER_BTC);
+      if (requiredSats > btcBalance) {
+        setBalanceWarning(`Insufficient balance. You have ${formatBtcDisplay(btcBalance)} but need ${formatBtcDisplay(requiredSats)}`);
+      } else {
+        setBalanceWarning(null);
+      }
+    }
+  }, [btcAmount, btcBalance]);
+
+  const checkBalance = async () => {
+    if (!btcAddress) return;
+    
+    setIsCheckingBalance(true);
+    try {
+      const info = await getBtcAddressInfo(btcAddress);
+      setBtcBalance(info.balance);
+    } catch (error) {
+      console.error('Failed to check balance:', error);
+      // Don't block the user if balance check fails
+      setBtcBalance(null);
+    } finally {
+      setIsCheckingBalance(false);
+    }
+  };
+
+  // Clear quote when inputs change
+  const handleInputChange = () => {
+    setQuote(null);
+    setQuoteError(null);
+  };
+
+  // Manual quote fetch with balance check
   const handleGetQuote = async () => {
     if (!btcAddress || !evmAddress) return;
     
-    const amountSats = Math.floor(parseFloat(btcAmount) * SATS_PER_BTC).toString();
+    const amount = parseFloat(btcAmount);
+    if (isNaN(amount) || amount < MIN_BTC_AMOUNT) {
+      setQuoteError({
+        type: 'generic',
+        message: `Minimum amount is ${MIN_BTC_AMOUNT} BTC`,
+      });
+      return;
+    }
+    
+    const requiredSats = Math.floor(amount * SATS_PER_BTC);
+    
+    // Check balance first if we have it
+    if (btcBalance !== null && requiredSats > btcBalance) {
+      setQuoteError({
+        type: 'insufficient_balance',
+        message: 'Insufficient BTC balance',
+        suggestion: `You have ${formatBtcDisplay(btcBalance)} but need approximately ${formatBtcDisplay(requiredSats + 1000)} (including fees).`,
+        balance: btcBalance,
+        required: requiredSats,
+      });
+      return;
+    }
+    
+    const amountSats = requiredSats.toString();
+    const usdcAddress = selectedChain?.usdcAddress || '0x0000000000000000000000000000000000000000';
+    
+    setQuoteError(null);
+    setQuote(null);
     
     try {
       const result = await quoteMutation.mutateAsync({
@@ -51,84 +196,55 @@ export function TopUpModal({ isOpen, onClose }: TopUpModalProps) {
         evmAddress,
         fromAmountSats: amountSats,
         toChainId: selectedChainId,
-        toToken: selectedChain?.usdcAddress || '0x0000000000000000000000000000000000000000',
-        slippage: slippage,
+        toToken: usdcAddress,
+        slippage,
       });
       setQuote(result);
-      
-      // Decode PSBT if present in transactionRequest.data
-      if (result.transactionRequest?.data) {
-        try {
-          const decoded = decodePsbt(result.transactionRequest.data);
-          setDecodedPsbt(decoded);
-        } catch (e) {
-          console.warn('Could not decode PSBT:', e);
-          setDecodedPsbt(null);
-        }
-      }
     } catch (error) {
       console.error('Quote error:', error);
+      const parsedError = parseQuoteError(error instanceof Error ? error : new Error('Unknown error'));
+      setQuoteError(parsedError);
     }
   };
 
-  const handleSimulateDeposit = async () => {
-    if (!evmAddress || !quote) return;
-    
-    // Get the estimated USDC amount from the quote
-    // toAmount is in the token's smallest unit (6 decimals for USDC)
-    const toAmountUsdc = parseFloat(quote.estimate.toAmount) / 1_000_000;
-    
-    /**
-     * PRODUCTION IMPLEMENTATION:
-     * =========================
-     * 
-     * In a real implementation, this flow would be:
-     * 
-     * 1. Prompt user to sign BTC transaction in MetaMask
-     *    - Use the transactionRequest data from the quote
-     *    - transactionRequest.to = BTC vault address
-     *    - transactionRequest.value = amount in sats
-     *    - transactionRequest.data = memo for bridge routing
-     * 
-     * 2. Broadcast signed BTC transaction to the network
-     * 
-     * 3. Get the BTC txHash and call backend endpoint to track:
-     *    POST /api/lifi/track-deposit { txHash, fromChain: 'BTC', toChain: selectedChainId }
-     * 
-     * 4. Backend polls Li.Fi status endpoint:
-     *    GET https://li.quest/v1/status?txHash=<btcTxHash>&fromChain=BTC&toChain=<evmChainId>
-     *    
-     *    Response statuses:
-     *    - NOT_FOUND: Transaction not yet indexed
-     *    - PENDING: Transaction in progress
-     *    - DONE: Transfer complete
-     *    - FAILED: Transfer failed
-     * 
-     * 5. Only when status === 'DONE':
-     *    - Get actual received amount from status.receiving.amount
-     *    - Credit vault with that amount
-     *    - Notify user of completion
-     * 
-     * For this MVP, we simulate success immediately:
-     */
+  if (!isOpen) return null;
+
+  const handleSendBtc = async () => {
+    if (!quote || !btcAddress) return;
     
     try {
-      await creditMutation.mutateAsync({
-        address: evmAddress,
-        amountUsdc: toAmountUsdc,
-      });
+      const txHash = await btcTx.sendTransaction({ quote, btcAddress });
+      console.log('BTC Transaction sent:', txHash);
       
-      // Close modal after successful credit
-      setQuote(null);
-      onClose();
+      // TODO: Start polling Li.Fi status API to track the bridge
+      // For now, just show success and close after delay
+      setTimeout(() => {
+        onClose();
+      }, 3000);
     } catch (error) {
-      console.error('Credit error:', error);
+      console.error('Send BTC error:', error);
     }
   };
 
+  // Get USDC decimals for the selected chain (Hyperliquid uses 8, others use 6)
+  const usdcDecimals = selectedChain?.usdcDecimals || 6;
+  const usdcDivisor = Math.pow(10, usdcDecimals);
+  
   const estimatedUsdc = quote 
-    ? parseFloat(quote.estimate.toAmount) / 1_000_000 
-    : parseFloat(btcAmount) * BTC_PRICE_USD;
+    ? parseFloat(quote.estimate.toAmount) / usdcDivisor 
+    : parseFloat(btcAmount || '0') * BTC_PRICE_USD;
+
+  const hasInsufficientBalance = btcBalance !== null && 
+    Math.floor(parseFloat(btcAmount || '0') * SATS_PER_BTC) > btcBalance;
+  
+  const canGetQuote = btcAddress && evmAddress && 
+    parseFloat(btcAmount || '0') >= MIN_BTC_AMOUNT && 
+    !quoteMutation.isPending && 
+    !btcTx.isLoading &&
+    !hasInsufficientBalance;
+    
+  const canSend = quote && btcAddress && !btcTx.isLoading && !quoteMutation.isPending;
+  const isLoadingQuote = quoteMutation.isPending;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -160,6 +276,37 @@ export function TopUpModal({ isOpen, onClose }: TopUpModalProps) {
           </div>
         ) : (
           <div className="space-y-4">
+            {/* Balance Display */}
+            <div className="p-3 bg-dark-800/50 rounded-lg flex justify-between items-center">
+              <span className="text-sm text-gray-400">Available Balance</span>
+              <span className="text-sm font-medium">
+                {isCheckingBalance ? (
+                  <span className="text-gray-500">Checking...</span>
+                ) : btcBalance !== null ? (
+                  <span className={btcBalance === 0 ? 'text-yellow-400' : 'text-white'}>
+                    {formatBtcDisplay(btcBalance)}
+                  </span>
+                ) : (
+                  <button 
+                    onClick={checkBalance}
+                    className="text-primary-400 hover:text-primary-300 text-xs"
+                  >
+                    Check balance
+                  </button>
+                )}
+              </span>
+            </div>
+
+            {/* Zero Balance Warning */}
+            {btcBalance === 0 && (
+              <div className="p-3 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
+                <p className="text-yellow-400 text-sm font-medium">No BTC balance detected</p>
+                <p className="text-yellow-300/70 text-xs mt-1">
+                  Send BTC to your address first, then return here to top up.
+                </p>
+              </div>
+            )}
+
             {/* BTC Amount Input */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -172,14 +319,37 @@ export function TopUpModal({ isOpen, onClose }: TopUpModalProps) {
                 value={btcAmount}
                 onChange={(e) => {
                   setBtcAmount(e.target.value);
-                  setQuote(null);
-                  setDecodedPsbt(null);
+                  handleInputChange();
                 }}
-                className="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus:outline-none focus:border-primary-500 text-white text-lg"
+                className={`w-full px-4 py-3 bg-dark-800 border rounded-lg focus:outline-none text-white text-lg ${
+                  hasInsufficientBalance 
+                    ? 'border-red-500 focus:border-red-400' 
+                    : 'border-dark-600 focus:border-primary-500'
+                }`}
+                disabled={btcTx.isLoading}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                ≈ ${(parseFloat(btcAmount || '0') * BTC_PRICE_USD).toLocaleString()} USD (estimated)
-              </p>
+              <div className="flex justify-between items-center mt-1">
+                <p className="text-xs text-gray-500">
+                  ≈ ${(parseFloat(btcAmount || '0') * BTC_PRICE_USD).toLocaleString()} USD
+                </p>
+                {btcBalance !== null && btcBalance > 0 && (
+                  <button
+                    onClick={() => {
+                      // Set max amount (balance minus ~2000 sats for fees)
+                      const maxSats = Math.max(0, btcBalance - 2000);
+                      setBtcAmount((maxSats / SATS_PER_BTC).toFixed(8));
+                      handleInputChange();
+                    }}
+                    className="text-xs text-primary-400 hover:text-primary-300"
+                  >
+                    MAX
+                  </button>
+                )}
+              </div>
+              {/* Insufficient Balance Warning */}
+              {balanceWarning && (
+                <p className="text-xs text-red-400 mt-1">{balanceWarning}</p>
+              )}
             </div>
 
             {/* Target Chain Selector */}
@@ -191,10 +361,10 @@ export function TopUpModal({ isOpen, onClose }: TopUpModalProps) {
                 value={selectedChainId}
                 onChange={(e) => {
                   setSelectedChainId(Number(e.target.value));
-                  setQuote(null);
-                  setDecodedPsbt(null);
+                  handleInputChange();
                 }}
                 className="w-full px-4 py-3 bg-dark-800 border border-dark-600 rounded-lg focus:outline-none focus:border-primary-500 text-white"
+                disabled={btcTx.isLoading}
               >
                 {SUPPORTED_EVM_CHAINS.map(chain => (
                   <option key={chain.id} value={chain.id}>
@@ -210,168 +380,223 @@ export function TopUpModal({ isOpen, onClose }: TopUpModalProps) {
                 Slippage Tolerance
               </label>
               <div className="flex gap-2">
-                {SLIPPAGE_OPTIONS.map((option) => (
+                {[
+                  { value: 0.01, label: '1%' },
+                  { value: 0.02, label: '2%' },
+                  { value: 0.03, label: '3%' },
+                  { value: 0.05, label: '5%' },
+                ].map((option) => (
                   <button
                     key={option.value}
                     onClick={() => {
                       setSlippage(option.value);
-                      setQuote(null);
-                      setDecodedPsbt(null);
+                      handleInputChange();
                     }}
+                    disabled={btcTx.isLoading}
                     className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       slippage === option.value
                         ? 'bg-primary-500 text-white'
                         : 'bg-dark-700 text-gray-300 hover:bg-dark-600'
-                    }`}
+                    } disabled:opacity-50`}
                   >
                     {option.label}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                BTC bridges need higher slippage due to longer confirmation times
-              </p>
             </div>
 
             {/* Get Quote Button */}
-            <button
-              onClick={handleGetQuote}
-              disabled={quoteMutation.isPending || !btcAmount || parseFloat(btcAmount) <= 0}
-              className="w-full px-4 py-3 bg-dark-700 hover:bg-dark-600 disabled:bg-dark-800 disabled:text-gray-500 rounded-lg font-medium transition-colors"
-            >
-              {quoteMutation.isPending ? 'Getting Quote...' : 'Get Quote'}
-            </button>
+            {!quote && (
+              <button
+                onClick={handleGetQuote}
+                disabled={!canGetQuote}
+                className="w-full px-4 py-3 bg-dark-700 hover:bg-dark-600 disabled:bg-dark-800 disabled:text-gray-500 rounded-lg font-medium transition-colors"
+              >
+                {isLoadingQuote ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Getting Quote...
+                  </span>
+                ) : hasInsufficientBalance ? (
+                  'Insufficient Balance'
+                ) : (
+                  'Get Quote'
+                )}
+              </button>
+            )}
 
-            {/* Error Display */}
-            {quoteMutation.isError && (
-              <div className="p-4 bg-red-900/20 border border-red-700 rounded-lg space-y-2">
-                <p className="text-red-400 text-sm font-medium">
-                  {quoteMutation.error instanceof Error ? quoteMutation.error.message : 'Failed to get quote'}
-                </p>
-                {quoteMutation.error instanceof Error && quoteMutation.error.message.includes('slippage') && (
-                  <p className="text-red-300/70 text-xs">
-                    Try increasing slippage tolerance above (2% or 3%)
-                  </p>
-                )}
-                {quoteMutation.error instanceof Error && quoteMutation.error.message.includes('funds') && (
-                  <p className="text-red-300/70 text-xs">
-                    Your BTC address needs UTXOs (unspent outputs) to create a quote. 
-                    Make sure the address has received BTC and has available balance.
-                  </p>
-                )}
-                {quoteMutation.error instanceof Error && quoteMutation.error.message.includes('No available quotes') && (
-                  <p className="text-red-300/70 text-xs">
-                    No bridge routes available. Try: increasing amount, changing slippage, or trying later.
-                  </p>
+            {/* Quote Error */}
+            {quoteError && !isLoadingQuote && (
+              <div className={`p-4 rounded-lg border ${
+                quoteError.type === 'rate_limit' 
+                  ? 'bg-yellow-900/20 border-yellow-700' 
+                  : quoteError.type === 'insufficient_balance'
+                  ? 'bg-red-900/20 border-red-700'
+                  : 'bg-red-900/20 border-red-700'
+              }`}>
+                <div className="flex items-start gap-2">
+                  {quoteError.type === 'rate_limit' ? (
+                    <svg className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  )}
+                  <div>
+                    <p className={`text-sm font-medium ${
+                      quoteError.type === 'rate_limit' ? 'text-yellow-400' : 'text-red-400'
+                    }`}>
+                      {quoteError.message}
+                    </p>
+                    {quoteError.suggestion && (
+                      <p className={`text-xs mt-1 ${
+                        quoteError.type === 'rate_limit' ? 'text-yellow-300/70' : 'text-red-300/70'
+                      }`}>
+                        {quoteError.suggestion}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {quoteError.type === 'rate_limit' && (
+                  <button
+                    onClick={handleGetQuote}
+                    className="mt-3 w-full px-3 py-2 bg-yellow-700/30 hover:bg-yellow-700/50 text-yellow-300 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Retry
+                  </button>
                 )}
               </div>
             )}
 
             {/* Quote Display */}
-            {quote && (
-              <div className="space-y-4 pt-4 border-t border-dark-700">
-                <h3 className="font-medium text-gray-200">Quote Details</h3>
-                
-                <div className="space-y-3">
-                  {/* Estimated Output */}
-                  <div className="p-4 bg-dark-800 rounded-lg">
-                    <p className="text-sm text-gray-400 mb-1">Estimated USDC on trading side</p>
-                    <p className="text-2xl font-bold text-primary-400">
-                      ${estimatedUsdc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-
-                  {/* Transaction Info */}
-                  <div className="p-4 bg-dark-800 rounded-lg space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Send to vault:</span>
-                      <span className="text-gray-200 font-mono text-xs">
-                        {quote.transactionRequest.to.slice(0, 12)}...{quote.transactionRequest.to.slice(-8)}
-                      </span>
+            {quote && !isLoadingQuote && (
+              <div className="space-y-3 pt-2">
+                {/* Estimated Output */}
+                <div className="p-4 bg-dark-800 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm text-gray-400 mb-1">You&apos;ll receive</p>
+                      <p className="text-2xl font-bold text-primary-400">
+                        ${estimatedUsdc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                      <p className="text-xs text-gray-500">USDC on {selectedChain?.name}</p>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Amount:</span>
-                      <span className="text-gray-200">
-                        {satsToBtc(quote.transactionRequest.value)} BTC
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Route:</span>
-                      <span className="text-gray-200">{quote.tool}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Est. time:</span>
-                      <span className="text-gray-200">
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">via {quote.tool}</p>
+                      <p className="text-xs text-gray-500">
                         ~{Math.ceil(quote.estimate.executionDuration / 60)} min
-                      </span>
+                      </p>
                     </div>
                   </div>
-
-                  {/* Expandable Details */}
-                  <button
-                    onClick={() => setShowDetails(!showDetails)}
-                    className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1"
-                  >
-                    {showDetails ? 'Hide' : 'Show'} technical details
-                    <svg 
-                      className={`w-4 h-4 transition-transform ${showDetails ? 'rotate-180' : ''}`} 
-                      fill="none" 
-                      stroke="currentColor" 
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-
-                  {showDetails && (
-                    <div className="p-4 bg-dark-950 rounded-lg text-xs font-mono space-y-3 text-gray-400">
-                      <div>
-                        <p className="text-gray-500 mb-1">Route Info:</p>
-                        <p>fromChain: BTC</p>
-                        <p>toChain: {selectedChain?.name} ({selectedChainId})</p>
-                        <p>fromToken: bitcoin</p>
-                        <p>toToken: USDC</p>
-                        <p>bridge: {quote.tool}</p>
-                      </div>
-                      
-                      {decodedPsbt && (
-                        <div className="pt-3 border-t border-dark-700">
-                          <p className="text-gray-500 mb-1">Decoded PSBT:</p>
-                          <p>outputs: {decodedPsbt.outputs.length}</p>
-                          <p>deposit: {satsToBtc(decodedPsbt.depositAmount)} BTC</p>
-                          {decodedPsbt.refundAmount > 0 && (
-                            <p>refund: {satsToBtc(decodedPsbt.refundAmount)} BTC</p>
-                          )}
-                          {decodedPsbt.memo && (
-                            <div className="mt-2">
-                              <p className="text-gray-500 mb-1">OP_RETURN Memo:</p>
-                              <p className="break-all text-primary-400/80">{decodedPsbt.memo}</p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      
-                      {!decodedPsbt && quote.transactionRequest.data && (
-                        <p className="break-all">raw data: {quote.transactionRequest.data.slice(0, 50)}...</p>
-                      )}
-                    </div>
-                  )}
                 </div>
 
-                {/* Simulate Button */}
-                <button
-                  onClick={handleSimulateDeposit}
-                  disabled={creditMutation.isPending}
-                  className="w-full px-4 py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-primary-500/50 rounded-lg font-medium transition-colors"
-                >
-                  {creditMutation.isPending ? 'Processing...' : 'Simulate Send + Credit'}
-                </button>
+                {/* Transaction Details (collapsed) */}
+                <details className="group">
+                  <summary className="text-sm text-primary-400 hover:text-primary-300 cursor-pointer flex items-center gap-1">
+                    <span>Transaction details</span>
+                    <svg className="w-4 h-4 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </summary>
+                  <div className="mt-2 p-3 bg-dark-950 rounded-lg text-xs font-mono space-y-1 text-gray-400">
+                    <p>Send: {satsToBtc(quote.transactionRequest.value)} BTC</p>
+                    <p className="break-all">To: {quote.transactionRequest.to}</p>
+                    <p>Bridge: {quote.tool}</p>
+                    <p>Min output: ${(parseFloat(quote.estimate.toAmountMin) / usdcDivisor).toFixed(2)} USDC</p>
+                  </div>
+                </details>
 
-                <p className="text-xs text-gray-500 text-center">
-                  MVP mode: This simulates the deposit without sending real BTC.
-                  In production, you would sign a BTC transaction here.
-                </p>
+                {/* New Quote Button */}
+                <button
+                  onClick={() => {
+                    setQuote(null);
+                    setQuoteError(null);
+                  }}
+                  className="text-sm text-gray-400 hover:text-gray-300 underline"
+                >
+                  Get new quote
+                </button>
               </div>
+            )}
+
+            {/* Transaction Status */}
+            {btcTx.status !== 'idle' && (
+              <div className={`p-4 rounded-lg ${
+                btcTx.status === 'error' 
+                  ? 'bg-red-900/20 border border-red-700' 
+                  : btcTx.status === 'success'
+                  ? 'bg-green-900/20 border border-green-700'
+                  : 'bg-primary-900/20 border border-primary-700'
+              }`}>
+                {btcTx.status === 'signing' && (
+                  <div className="flex items-center gap-2">
+                    <svg className="animate-spin h-5 w-5 text-primary-400" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <span className="text-primary-400">Please sign the transaction in your wallet...</span>
+                  </div>
+                )}
+                {btcTx.status === 'broadcasting' && (
+                  <p className="text-primary-400">Broadcasting transaction...</p>
+                )}
+                {btcTx.status === 'success' && (
+                  <div>
+                    <p className="text-green-400 font-medium">Transaction sent!</p>
+                    {btcTx.txHash && (
+                      <p className="text-xs text-gray-400 mt-1 font-mono break-all">
+                        TX: {btcTx.txHash}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-2">
+                      Bridge in progress. USDC will arrive in ~{quote ? Math.ceil(quote.estimate.executionDuration / 60) : 10} minutes.
+                    </p>
+                  </div>
+                )}
+                {btcTx.status === 'error' && (
+                  <div>
+                    <p className="text-red-400 font-medium">Transaction failed</p>
+                    <p className="text-xs text-red-300/70 mt-1">{btcTx.error}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Send Button - only show when quote is available */}
+            {quote && (
+              <button
+                onClick={handleSendBtc}
+                disabled={!canSend}
+                className={`w-full px-4 py-4 rounded-lg font-semibold text-lg transition-all ${
+                  canSend
+                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-lg shadow-primary-500/25'
+                    : 'bg-dark-700 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                {btcTx.isLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Processing...
+                  </span>
+                ) : (
+                  `Send ${satsToBtc(quote.transactionRequest.value)} BTC`
+                )}
+              </button>
+            )}
+
+            {/* Info Text */}
+            {quote && btcTx.status === 'idle' && (
+              <p className="text-xs text-gray-500 text-center">
+                Your wallet will prompt you to sign the Bitcoin transaction
+              </p>
             )}
           </div>
         )}
