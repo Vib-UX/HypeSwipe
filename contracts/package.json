@@ -1,0 +1,12 @@
+{
+  "name": "hypeswipe-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HypeSwipe smart contracts - Stub for future on-chain components",
+  "scripts": {
+    "compile": "echo 'No contracts yet - stub package'",
+    "test": "echo 'No contracts yet - stub package'",
+    "deploy": "echo 'No contracts yet - stub package'"
+  },
+  "devDependencies": {}
+}

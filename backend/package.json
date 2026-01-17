@@ -1,0 +1,16 @@
+{
+  "name": "hypeswipe-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HypeSwipe backend services - Stub for future dedicated backend (currently using Next.js API routes)",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "echo 'Backend is currently integrated in frontend via Next.js API routes'",
+    "build": "echo 'No build step needed - using Next.js API routes'"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0"
+  }
+}
