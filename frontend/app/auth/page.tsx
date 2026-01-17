@@ -33,8 +33,11 @@ export default function AuthPage() {
     isApproving: isBuilderApproving,
     checkMaxBuilderFee,
   } = useBuilderApproval();
-  const { approveAgent: approveAgentWallet, isApproving: isAgentApproving } =
-    useAgentWalletApproval();
+  const {
+    approveAgent: approveAgentWallet,
+    isApproving: isAgentApproving,
+    checkAgentWalletStatus,
+  } = useAgentWalletApproval();
 
   const [currentStep, setCurrentStep] = useState<StepNumber>(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -46,12 +49,14 @@ export default function AuthPage() {
   const agentWalletApproved = useUserStore(
     (state) => state.agentWalletApproved,
   );
+  const pearAccessToken = useUserStore((state) => state.pearAccessToken);
 
   const authStatus = getAuthStatus(isConnected);
 
   const hasAutoTriggeredAuth = useRef(false);
   const hasAutoTriggeredBuilder = useRef(false);
   const hasAutoTriggeredAgent = useRef(false);
+  const hasCheckedStatusOnLoad = useRef(false);
 
   useEffect(() => {
     if (authStatus === "ready_to_trade") {
@@ -60,10 +65,34 @@ export default function AuthPage() {
   }, [authStatus, router]);
 
   useEffect(() => {
+    const checkStatusOnLoad = async () => {
+      if (
+        isConnected &&
+        address &&
+        pearAccessToken &&
+        !hasCheckedStatusOnLoad.current
+      ) {
+        hasCheckedStatusOnLoad.current = true;
+
+        await checkMaxBuilderFee();
+
+        await checkAgentWalletStatus();
+      }
+    };
+
+    checkStatusOnLoad();
+  }, [
+    isConnected,
+    address,
+    pearAccessToken,
+    checkMaxBuilderFee,
+    checkAgentWalletStatus,
+  ]);
+
+  useEffect(() => {
     if (isConnected && address) {
       setCurrentStep(2);
       if (authStatus === "authenticated" && !builderCodeApproved) {
-        checkMaxBuilderFee();
         setCurrentStep(3);
       }
       if (builderCodeApproved && !agentWalletApproved) {
@@ -74,6 +103,7 @@ export default function AuthPage() {
       hasAutoTriggeredAuth.current = false;
       hasAutoTriggeredBuilder.current = false;
       hasAutoTriggeredAgent.current = false;
+      hasCheckedStatusOnLoad.current = false;
     }
   }, [
     isConnected,
@@ -81,7 +111,6 @@ export default function AuthPage() {
     authStatus,
     builderCodeApproved,
     agentWalletApproved,
-    checkMaxBuilderFee,
   ]);
 
   const handleConnect = async () => {
@@ -89,7 +118,7 @@ export default function AuthPage() {
     try {
       const connector = connectors[0];
       if (connector) {
-        await connect({ connector });
+        connect({ connector });
       }
     } catch (error) {
       console.error("Failed to connect wallet:", error);
@@ -318,7 +347,6 @@ export default function AuthPage() {
               {STEPS.map((step) => {
                 const isCompleted = step.id < currentStep;
                 const isCurrent = step.id === currentStep;
-                const isPending = step.id > currentStep;
 
                 return (
                   <div

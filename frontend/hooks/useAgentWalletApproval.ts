@@ -1,9 +1,10 @@
 'use client';
 
 import { useAccount, useSignTypedData } from 'wagmi';
-import { createAgentWallet, getAgentWallet } from '@/lib/pear-api';
+import { createAgentWallet, getAgentWallet, PearApiException } from '@/lib/pear-api';
 import { useUserStore } from '@/store/userStore';
 import { useToast } from '@/providers/ToastProvider';
+import { useHyperliquid } from '@/hooks/useHyperliquid';
 
 export interface AgentWalletApprovalResult {
   success: boolean;
@@ -12,11 +13,56 @@ export interface AgentWalletApprovalResult {
   agentWalletAddress?: string;
 }
 
+export interface AgentWalletStatusResult {
+  hasAgentWallet: boolean;
+  isApproved: boolean;
+  agentWalletAddress?: string;
+}
+
 export function useAgentWalletApproval() {
   const { address, chainId } = useAccount();
-  const { setAgentWalletApproved } = useUserStore();
+  const { setAgentWalletApproved, pearAccessToken } = useUserStore();
   const { signTypedDataAsync } = useSignTypedData();
   const { showToast } = useToast();
+  const hyperliquid = useHyperliquid();
+
+  const checkAgentWalletStatus = async (): Promise<AgentWalletStatusResult> => {
+    if (!address) {
+      return { hasAgentWallet: false, isApproved: false };
+    }
+
+    if (!pearAccessToken) {
+      return { hasAgentWallet: false, isApproved: false };
+    }
+
+    try {
+      const walletResponse = await getAgentWallet();
+
+      if (!walletResponse.agentWalletAddress) {
+        return { hasAgentWallet: false, isApproved: false };
+      }
+
+      const isApproved = await hyperliquid.isAgentApproved(
+        address,
+        walletResponse.agentWalletAddress
+      );
+
+      setAgentWalletApproved(isApproved, walletResponse.agentWalletAddress);
+
+      return {
+        hasAgentWallet: true,
+        isApproved,
+        agentWalletAddress: walletResponse.agentWalletAddress,
+      };
+    } catch (error) {
+      if (error instanceof PearApiException && error.statusCode === 404) {
+        return { hasAgentWallet: false, isApproved: false };
+      }
+
+      console.error('Failed to check agent wallet status:', error);
+      return { hasAgentWallet: false, isApproved: false };
+    }
+  };
 
   const approveAgent = async (): Promise<AgentWalletApprovalResult> => {
     if (!address) {
@@ -33,17 +79,29 @@ export function useAgentWalletApproval() {
       const walletResponse = await getAgentWallet();
 
       if (walletResponse.agentWalletAddress) {
-        setAgentWalletApproved(true, walletResponse.agentWalletAddress);
-        showToast('Agent wallet already exists and approved', 'success', 5000);
-        return { success: true, agentWalletAddress: walletResponse.agentWalletAddress };
+        const isApproved = await hyperliquid.isAgentApproved(
+          address,
+          walletResponse.agentWalletAddress
+        );
+
+        if (isApproved) {
+          setAgentWalletApproved(true, walletResponse.agentWalletAddress);
+          showToast('Agent wallet already exists and approved', 'success', 5000);
+          return { success: true, agentWalletAddress: walletResponse.agentWalletAddress };
+        }
       }
 
-      showToast('Creating agent wallet...', 'success', 0);
+      let agentWalletAddress = walletResponse.agentWalletAddress;
 
-      const createResponse = await createAgentWallet();
+      if (!agentWalletAddress) {
+        showToast('Creating agent wallet...', 'success', 0);
+        const createResponse = await createAgentWallet();
 
-      if (!createResponse.agentWalletAddress) {
-        throw new Error('Failed to create agent wallet');
+        if (!createResponse.agentWalletAddress) {
+          throw new Error('Failed to create agent wallet');
+        }
+
+        agentWalletAddress = createResponse.agentWalletAddress;
       }
 
       showToast('Approving agent wallet on Hyperliquid...', 'success', 0);
@@ -69,7 +127,7 @@ export function useAgentWalletApproval() {
           action: 'approveAgent',
           hyperliquidChain: 'Mainnet',
           signatureChainId: '0xa4b1',
-          agentAddress: createResponse.agentWalletAddress,
+          agentAddress: agentWalletAddress,
           nonce: Date.now().toString(),
         },
       } as any);
@@ -83,7 +141,7 @@ export function useAgentWalletApproval() {
           action: 'approveAgent',
           hyperliquidChain: 'Mainnet',
           signatureChainId: '0xa4b1',
-          agentAddress: createResponse.agentWalletAddress,
+          agentAddress: agentWalletAddress,
           nonce: Date.now().toString(),
           signature,
         }),
@@ -98,9 +156,9 @@ export function useAgentWalletApproval() {
 
       showToast('Agent wallet approved successfully!', 'success', 5000);
 
-      setAgentWalletApproved(true, createResponse.agentWalletAddress);
+      setAgentWalletApproved(true, agentWalletAddress);
 
-      return { success: true, txHash: data.txHash, agentWalletAddress: createResponse.agentWalletAddress };
+      return { success: true, txHash: data.txHash, agentWalletAddress };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Approval failed';
 
@@ -116,6 +174,7 @@ export function useAgentWalletApproval() {
 
   return {
     approveAgent,
+    checkAgentWalletStatus,
     isApproving: false,
     canApprove: !!address && chainId === 1,
   };

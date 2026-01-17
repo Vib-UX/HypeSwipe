@@ -1,13 +1,17 @@
 import { WalletClient } from "viem";
 import { ExchangeClient, InfoClient, HttpTransport } from "@nktkas/hyperliquid";
 
+export interface ExtraAgent {
+  address: `0x${string}`;
+  name: string;
+  validUntil: number;
+}
+
 export class HyperliquidSDK {
   private infoClient: InfoClient;
   private exchangeClient?: ExchangeClient;
-  private wallet?: WalletClient;
 
   constructor(wallet?: WalletClient) {
-    this.wallet = wallet;
     this.infoClient = new InfoClient({ transport: new HttpTransport() });
 
     if (wallet) {
@@ -42,5 +46,32 @@ export class HyperliquidSDK {
       throw new Error("Wallet not provided. Cannot approve builder fee.");
     }
     return this.exchangeClient.approveBuilderFee({ builder, maxFeeRate });
+  }
+
+  /**
+   * Gets the list of extra agents (approved agent wallets) for a user.
+   * @param user The user's address.
+   * @returns Array of extra agent details including address, name, and validity period.
+   */
+  async getExtraAgents(user: string): Promise<ExtraAgent[]> {
+    return this.infoClient.extraAgents({ user: user as `0x${string}` });
+  }
+
+  /**
+   * Checks if a specific agent wallet is approved for a user.
+   * @param user The user's address.
+   * @param agentAddress The agent wallet address to check.
+   * @returns True if the agent is approved and valid, false otherwise.
+   */
+  async isAgentApproved(user: string, agentAddress: string): Promise<boolean> {
+    const agents = await this.getExtraAgents(user);
+    const normalizedAgentAddress = agentAddress.toLowerCase();
+    const now = Date.now();
+
+    return agents.some(
+      (agent) =>
+        agent.address.toLowerCase() === normalizedAgentAddress &&
+        agent.validUntil > now
+    );
   }
 }
