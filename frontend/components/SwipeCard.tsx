@@ -6,11 +6,12 @@ import type { TradeCard } from '@/types/trade';
 
 interface SwipeCardProps {
   trade: TradeCard;
+  size: number;
   onSwipe: (direction: 'left' | 'right') => void;
   isTop: boolean;
 }
 
-export function SwipeCard({ trade, onSwipe, isTop }: SwipeCardProps) {
+export function SwipeCard({ trade, size, onSwipe, isTop }: SwipeCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [dragState, setDragState] = useState({ x: 0, startX: 0, isDragging: false });
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
@@ -85,7 +86,7 @@ export function SwipeCard({ trade, onSwipe, isTop }: SwipeCardProps) {
             </div>
             <div>
               <h3 className="font-bold text-lg text-white">{trade.ticker}</h3>
-              <p className="text-xs text-gray-500">{trade.timeframe} Chart</p>
+              <p className="text-xs text-gray-500">{trade.timeframe.toUpperCase()} Chart</p>
             </div>
           </div>
           <div
@@ -101,25 +102,25 @@ export function SwipeCard({ trade, onSwipe, isTop }: SwipeCardProps) {
 
         {/* Chart */}
         <div className="flex-1 p-2 min-h-[200px]">
-          <MiniChart candles={trade.candles} direction={trade.direction} />
+          {trade.candles.length > 0 ? (
+            <MiniChart candles={trade.candles} direction={trade.direction} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="animate-pulse text-gray-500">Loading chart...</div>
+            </div>
+          )}
         </div>
 
-        {/* Trade details */}
+        {/* Trade details - removed Entry, kept Leverage and Size */}
         <div className="p-4 border-t border-dark-700 bg-dark-900/50">
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-2 gap-4 text-center">
             <div>
               <p className="text-xs text-gray-500 mb-1">Leverage</p>
               <p className="text-lg font-bold text-primary-400">{trade.leverage}x</p>
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-1">Size</p>
-              <p className="text-lg font-bold text-white">${trade.size}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Entry</p>
-              <p className="text-lg font-bold text-gray-300">
-                ${trade.entryPrice.toLocaleString()}
-              </p>
+              <p className="text-lg font-bold text-white">${size}</p>
             </div>
           </div>
         </div>
