@@ -1,0 +1,21 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f6ba77;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#df5b11;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Rounded rectangle background with gradient -->
+  <rect width="512" height="512" rx="80" fill="url(#gradient)"/>
+  
+  <!-- Lightning bolt icon (centered, scaled to fit) -->
+  <path 
+    d="M277.333 213.333V64L85.333 298.667H234.667V448L426.667 213.333H277.333Z" 
+    stroke="white" 
+    stroke-width="32" 
+    stroke-linecap="round" 
+    stroke-linejoin="round"
+    fill="none"
+  />
+</svg>
