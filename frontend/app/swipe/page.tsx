@@ -14,9 +14,9 @@ export default function SwipePage() {
   const [size, setSize] = useState<number>(10);
   const [loading, setLoading] = useState(true);
 
-  // Fetch real candles from Hyperliquid
+  // Fetch real candles from Hyperliquid (news is hardcoded in mock data)
   useEffect(() => {
-    async function fetchCandles() {
+    async function fetchData() {
       setLoading(true);
       const scenarios = generateTradeScenarios();
       
@@ -36,8 +36,7 @@ export default function SwipePage() {
               ...scenario,
               candles: data.candles || [],
             } as TradeCard;
-          } catch (error) {
-            console.error(`Failed to fetch candles for ${scenario.ticker}:`, error);
+          } catch {
             return { ...scenario, candles: [] } as TradeCard;
           }
         })
@@ -47,7 +46,7 @@ export default function SwipePage() {
       setLoading(false);
     }
 
-    fetchCandles();
+    fetchData();
   }, []);
 
   const handleSwipe = (direction: 'left' | 'right') => {
