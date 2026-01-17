@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@nktkas/hyperliquid": "^0.30.2",
     "@rainbow-me/rainbowkit": "^2.1.0",
     "@scure/base": "^1.2.6",
     "@scure/btc-signer": "^2.0.1",
