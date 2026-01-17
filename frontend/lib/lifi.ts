@@ -17,9 +17,16 @@ import type {
   LifiTool,
   LifiQuoteResponse,
   LifiStatusResponse,
+  LifiAction,
+  LifiEstimate,
+  LifiTransactionRequest,
 } from "@/types";
 
 const LIFI_BASE_URL = "https://li.quest/v1";
+
+// Li.Fi API key for authenticated requests (avoids rate limiting)
+// Set via LIFI_API_KEY environment variable
+const LIFI_API_KEY = process.env.LIFI_API_KEY || "";
 
 /**
  * Custom error class for Li.Fi API errors
@@ -37,6 +44,7 @@ export class LifiApiError extends Error {
 
 /**
  * Helper function to make API requests to Li.Fi
+ * Uses API key authentication if LIFI_API_KEY env var is set
  */
 async function lifiRequest<T>(
   endpoint: string,
@@ -44,12 +52,22 @@ async function lifiRequest<T>(
 ): Promise<T> {
   const url = `${LIFI_BASE_URL}${endpoint}`;
 
+  // Build headers with optional API key
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "Content-Type": "application/json",
+  };
+
+  // Add API key header if available (for authenticated requests)
+  if (LIFI_API_KEY) {
+    headers["x-lifi-api-key"] = LIFI_API_KEY;
+  }
+
   try {
     const response = await fetch(url, {
       ...options,
       headers: {
-        accept: "application/json",
-        "Content-Type": "application/json",
+        ...headers,
         ...options?.headers,
       },
     });
@@ -191,6 +209,182 @@ export async function getBtcToEvmQuote(
 }
 
 /**
+ * Advanced routes response structure
+ */
+export interface LifiAdvancedRoutesResponse {
+  routes: LifiRoute[];
+}
+
+export interface LifiRoute {
+  id: string;
+  fromChainId: number;
+  fromAmount: string;
+  fromAmountUSD: string;
+  fromToken: LifiToken;
+  fromAddress: string;
+  toChainId: number;
+  toAmount: string;
+  toAmountMin: string;
+  toAmountUSD: string;
+  toToken: LifiToken;
+  toAddress: string;
+  steps: LifiRouteStep[];
+  tags: string[];
+}
+
+export interface LifiRouteStep {
+  id: string;
+  type: string;
+  tool: string;
+  toolDetails: {
+    key: string;
+    name: string;
+    logoURI?: string;
+  };
+  action: LifiAction;
+  estimate: LifiEstimate;
+  includedSteps?: LifiRouteStep[];
+  transactionRequest?: LifiTransactionRequest;
+}
+
+/**
+ * Get advanced routes for BTC → Hyperliquid or other multi-step swaps
+ * Endpoint: POST /advanced/routes
+ *
+ * This is required for Hyperliquid (chain 1337) since it uses a 2-step process:
+ * 1. BTC → Hyperliquid via relaydepository
+ * 2. Internal swap via hyperliquidProtocol
+ *
+ * @param params - Quote parameters (same as regular quote)
+ * @returns Routes with multiple steps
+ */
+export async function getAdvancedRoutes(
+  params: GetBtcToEvmQuoteParams
+): Promise<LifiAdvancedRoutesResponse> {
+  const slippage = params.slippage ?? 0.01;
+
+  const body = {
+    fromChainId: 20000000000001, // BTC chain ID
+    fromTokenAddress: "bitcoin",
+    fromAmount: params.fromAmount,
+    fromAddress: params.fromAddress,
+    toChainId: params.toChainId,
+    toTokenAddress: params.toToken,
+    toAddress: params.toAddress,
+    options: {
+      slippage,
+      allowSwitchChain: true,
+      ...(params.allowBridges && params.allowBridges.length > 0
+        ? { bridges: { allow: params.allowBridges } }
+        : {}),
+    },
+  };
+
+  return lifiRequest<LifiAdvancedRoutesResponse>("/advanced/routes", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Get step transaction for executing a route step
+ * Endpoint: POST /advanced/stepTransaction
+ *
+ * Note: The step object is sent directly as the body (not wrapped in { step })
+ *
+ * @param step - The route step to get transaction for
+ * @returns Updated step with transactionRequest
+ */
+export async function getStepTransaction(
+  step: LifiRouteStep
+): Promise<LifiRouteStep> {
+  return lifiRequest<LifiRouteStep>("/advanced/stepTransaction", {
+    method: "POST",
+    body: JSON.stringify(step),
+  });
+}
+
+// Hyperliquid chain ID constant
+const HYPERLIQUID_CHAIN_ID = 1337;
+
+/**
+ * Smart quote function that uses the appropriate endpoint:
+ * - Regular /quote for Ethereum, Arbitrum
+ * - /advanced/routes for Hyperliquid (multi-step required)
+ *
+ * @param params - Quote parameters
+ * @returns Quote response (normalized from either endpoint)
+ */
+export async function getBtcToEvmQuoteSmart(
+  params: GetBtcToEvmQuoteParams
+): Promise<LifiQuoteResponse> {
+  // For Hyperliquid, use advanced routes (multi-step required)
+  if (params.toChainId === HYPERLIQUID_CHAIN_ID) {
+    const routesResponse = await getAdvancedRoutes(params);
+
+    if (!routesResponse.routes || routesResponse.routes.length === 0) {
+      throw new LifiApiError("No available routes for BTC to Hyperliquid", 404);
+    }
+
+    const route = routesResponse.routes[0];
+    const firstStep = route.steps[0];
+
+    // Get the transaction request for the first step (BTC transaction)
+    let stepWithTx = firstStep;
+    if (!firstStep.transactionRequest) {
+      stepWithTx = await getStepTransaction(firstStep);
+    }
+
+    if (!stepWithTx.transactionRequest) {
+      throw new LifiApiError(
+        "Failed to get transaction request for route",
+        500
+      );
+    }
+
+    // Normalize to LifiQuoteResponse format
+    // Calculate total execution duration from all steps
+    const totalDuration = route.steps.reduce(
+      (sum, s) => sum + (s.estimate?.executionDuration || 0),
+      0
+    );
+
+    return {
+      id: route.id,
+      type: "lifi",
+      tool: firstStep.tool,
+      toolDetails: firstStep.toolDetails,
+      action: {
+        ...firstStep.action,
+        // Override with final destination token
+        toToken: route.toToken,
+        toChainId: route.toChainId,
+      },
+      estimate: {
+        ...firstStep.estimate,
+        // Use final output amounts
+        toAmount: route.toAmount,
+        toAmountMin: route.toAmountMin,
+        toAmountUSD: route.toAmountUSD,
+        executionDuration: totalDuration,
+      },
+      includedSteps: route.steps.map((s) => ({
+        id: s.id,
+        type: s.type,
+        tool: s.tool,
+        toolDetails: s.toolDetails,
+        action: s.action,
+        estimate: s.estimate,
+      })),
+      transactionRequest: stepWithTx.transactionRequest,
+    };
+  }
+
+  // For other chains, use regular quote endpoint
+  return getBtcToEvmQuote(params);
+}
+
+/**
  * Get the status of a cross-chain transaction
  * Endpoint: GET /status
  *
@@ -253,8 +447,35 @@ function isOpReturnScript(script: Uint8Array): boolean {
 }
 
 /**
- * Extract memo text from OP_RETURN script
+ * Check if a byte array is valid UTF-8 text (printable ASCII + common chars)
+ */
+function isLikelyUtf8Text(data: Uint8Array): boolean {
+  // Check if most bytes are printable ASCII or valid UTF-8
+  let printableCount = 0;
+  for (let i = 0; i < data.length; i++) {
+    const byte = data[i];
+    // Printable ASCII (space to ~) or common control chars (tab, newline)
+    if (
+      (byte >= 0x20 && byte <= 0x7e) ||
+      byte === 0x09 ||
+      byte === 0x0a ||
+      byte === 0x0d
+    ) {
+      printableCount++;
+    }
+  }
+  // If more than 70% is printable, treat as text
+  return data.length > 0 && printableCount / data.length > 0.7;
+}
+
+/**
+ * Extract memo from OP_RETURN script
  * OP_RETURN format: 0x6a <push_opcode> <data>
+ *
+ * Returns an object with both hex and text representations:
+ * - hex: Always available, the raw hex of the memo data
+ * - text: Only if the data appears to be valid text (e.g., ThorSwap memos)
+ * - lifiTrackingId: Extracted Li.Fi tracking ID if present (e.g., "lifi2Q..." or "lifi92c9cbbc5")
  */
 function extractOpReturnMemo(script: Uint8Array): string | null {
   if (!isOpReturnScript(script)) return null;
@@ -295,23 +516,43 @@ function extractOpReturnMemo(script: Uint8Array): string | null {
         (script[offset + 3] << 24);
       offset += 4;
     } else {
-      // Unknown format, try to decode the rest as text
-      const data = script.slice(1);
-      return new TextDecoder().decode(data);
+      // Unknown format, return hex of everything after OP_RETURN
+      return `0x${hex.encode(script.slice(1))}`;
     }
 
     // Extract the data
+    let data: Uint8Array;
     if (offset + dataLength > script.length) {
-      // Not enough data, decode what we have
-      const data = script.slice(offset);
-      return new TextDecoder().decode(data);
+      data = script.slice(offset);
+    } else {
+      data = script.slice(offset, offset + dataLength);
     }
 
-    const data = script.slice(offset, offset + dataLength);
-    return new TextDecoder().decode(data);
+    // Check if it's text-like (ThorSwap, etc.) or binary (Chainflip, etc.)
+    if (isLikelyUtf8Text(data)) {
+      // It's readable text - return as string
+      return new TextDecoder().decode(data);
+    } else {
+      // Binary data - return as hex with 0x prefix
+      // Also try to extract the lifi tracking ID which is usually at the end
+      const hexStr = hex.encode(data);
+
+      // Try to find readable lifi suffix in the raw bytes
+      // Look for "|lifi" or "=|lifi" pattern
+      const textAttempt = new TextDecoder("utf-8", { fatal: false }).decode(
+        data
+      );
+      const lifiMatch = textAttempt.match(/[=|]?lifi[a-zA-Z0-9]+/);
+
+      if (lifiMatch) {
+        return `0x${hexStr} (tracking: ${lifiMatch[0]})`;
+      }
+
+      return `0x${hexStr}`;
+    }
   } catch {
     // If decoding fails, return hex representation
-    return hex.encode(script.slice(1));
+    return `0x${hex.encode(script.slice(1))}`;
   }
 }
 

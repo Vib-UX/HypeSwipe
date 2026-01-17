@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getBtcToEvmQuote, LifiApiError } from '@/lib/lifi';
-import type { LifiQuoteRequest, LifiQuoteResponse } from '@/types';
+import { getBtcToEvmQuoteSmart, LifiApiError } from '@/lib/lifi';
+import type { LifiQuoteRequest } from '@/types';
 import { SUPPORTED_EVM_CHAINS, NATIVE_TOKEN_ADDRESS } from '@/types';
 
 /**
  * POST /api/lifi/quote-btc-to-usdc
  * 
  * Gets a quote for swapping BTC to USDC on an EVM chain via Li.Fi.
+ * Supports: Ethereum (1), Arbitrum (42161), and Hyperliquid (1337)
  * 
  * Body: {
  *   btcAddress: string;      // User's BTC address
  *   evmAddress: string;      // User's EVM address (destination)
  *   fromAmountSats: string;  // Amount in satoshis
- *   toChainId: number;       // 1 (Ethereum) or 42161 (Arbitrum)
+ *   toChainId: number;       // 1 (Ethereum), 42161 (Arbitrum), or 1337 (Hyperliquid)
  *   toToken: string;         // USDC address or 0x0 for native
  * }
  * 
@@ -97,7 +98,8 @@ export async function POST(request: NextRequest) {
     const slippage = body.slippage ?? 0.01;
 
     // Call Li.Fi API to get quote
-    const quote = await getBtcToEvmQuote({
+    // Uses smart routing: regular endpoint for ETH/Arbitrum, advanced routes for Hyperliquid
+    const quote = await getBtcToEvmQuoteSmart({
       fromAddress: body.btcAddress,
       fromAmount: body.fromAmountSats,
       toChainId: body.toChainId,

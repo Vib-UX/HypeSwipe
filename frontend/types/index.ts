@@ -203,9 +203,13 @@ export const BTC_CHAIN_ID = 20000000000001;
 export const BTC_CHAIN_KEY = 'BTC';
 
 export const SUPPORTED_EVM_CHAINS = [
-  { id: 1, name: 'Ethereum', usdcAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
-  { id: 42161, name: 'Arbitrum', usdcAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' },
+  { id: 1, name: 'Ethereum', usdcAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', usdcDecimals: 6 },
+  { id: 42161, name: 'Arbitrum', usdcAddress: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', usdcDecimals: 6 },
+  { id: 1337, name: 'Hyperliquid', usdcAddress: '0x6d1e7cde53bA9467B783Cb7c530CE05400000000', usdcDecimals: 8 },
 ] as const;
+
+// Hyperliquid chain ID (Li.Fi uses 1337 for Hyperliquid L1)
+export const HYPERLIQUID_CHAIN_ID = 1337;
 
 // Native token address (used for ETH on EVM chains)
 export const NATIVE_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000000';
