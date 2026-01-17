@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { ToastContainer } from '@/components/Toast';
 
 export type ToastType = 'success' | 'error';
 
@@ -53,6 +54,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
   return (
     <ToastContext.Provider value={{ showToast, hideToast }}>
       {children}
+      <ToastContainer toasts={toasts} onDismiss={hideToast} />
     </ToastContext.Provider>
   );
 }
