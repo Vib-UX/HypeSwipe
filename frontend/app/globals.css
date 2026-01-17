@@ -41,3 +41,17 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #4b4e55;
 }
+
+/* Thin scrollbar for news section */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #3e4046;
+  border-radius: 2px;
+}

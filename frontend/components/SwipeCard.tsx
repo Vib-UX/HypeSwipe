@@ -77,7 +77,7 @@ export function SwipeCard({ trade, size, onSwipe, isTop }: SwipeCardProps) {
       )}
 
       {/* Card content */}
-      <div className="h-full bg-dark-800/90 backdrop-blur border border-dark-700 rounded-3xl overflow-hidden flex flex-col">
+      <div className="h-full bg-dark-800/90 backdrop-blur border border-dark-700 rounded-3xl overflow-y-auto scrollbar-thin flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-dark-700 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -111,22 +111,82 @@ export function SwipeCard({ trade, size, onSwipe, isTop }: SwipeCardProps) {
           )}
         </div>
 
-        {/* Trade details - removed Entry, kept Leverage and Size */}
-        <div className="p-4 border-t border-dark-700 bg-dark-900/50">
-          <div className="grid grid-cols-2 gap-4 text-center">
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Leverage</p>
+        {/* Trade details - Leverage and Size */}
+        <div className="px-4 py-3 border-t border-dark-700 bg-dark-900/50">
+          <div className="flex items-center justify-center gap-6">
+            <div className="text-center">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Leverage</p>
               <p className="text-lg font-bold text-primary-400">{trade.leverage}x</p>
             </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Size</p>
+            <div className="w-px h-8 bg-dark-600" />
+            <div className="text-center">
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Size</p>
               <p className="text-lg font-bold text-white">${size}</p>
             </div>
           </div>
         </div>
 
+        {/* AI Sentiment Section */}
+        <div className="px-4 py-3 border-t border-dark-700">
+          {/* Sentiment meter */}
+          <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-1">
+              <span className="text-green-400 text-sm">📈</span>
+              <span className="text-xs font-medium text-green-400">{trade.sentiment.bullish}%</span>
+            </div>
+            <div className="flex-1 h-2 bg-dark-700 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full transition-all"
+                style={{ width: `${trade.sentiment.bullish}%` }}
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-xs font-medium text-red-400">{100 - trade.sentiment.bullish}%</span>
+              <span className="text-red-400 text-sm">📉</span>
+            </div>
+          </div>
+          
+          {/* AI Summary */}
+          <div className="flex items-start gap-2">
+            <span className="text-xs">🤖</span>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              {trade.sentiment.summary}
+            </p>
+          </div>
+        </div>
+
+        {/* News Section - Scrollable */}
+        <div className="border-t border-dark-700">
+          <div className="px-4 py-2 flex items-center gap-2">
+            <span className="text-xs">📰</span>
+            <span className="text-[10px] text-gray-500 uppercase tracking-wide">Latest News</span>
+          </div>
+          <div className="px-4 pb-3">
+            <div className="space-y-2">
+              {trade.news.map((item, idx) => (
+                <div key={idx} className="flex items-start gap-2">
+                  <span className={`text-[10px] mt-0.5 ${
+                    item.sentiment === 'positive' ? 'text-green-400' : 
+                    item.sentiment === 'negative' ? 'text-red-400' : 'text-gray-500'
+                  }`}>
+                    {item.sentiment === 'positive' ? '▲' : item.sentiment === 'negative' ? '▼' : '●'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-gray-300 leading-tight truncate">
+                      {item.title}
+                    </p>
+                    <p className="text-[9px] text-gray-600">
+                      {item.source} · {item.time}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* Swipe hint */}
-        <div className="px-4 pb-4 flex justify-between text-xs text-gray-600">
+        <div className="px-4 pb-3 flex justify-between text-[10px] text-gray-600 border-t border-dark-700 pt-2">
           <span>← Skip</span>
           <span>Trade →</span>
         </div>
