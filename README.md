@@ -1,145 +1,116 @@
 # HypeSwipe
 
-A BTC-funded perpetuals trading app with swipe-to-trade UX.
+**Tinder for Trading.** Swipe through positions, bet small, think fast. Built on Hyperliquid.
 
-## Overview
+## What is HypeSwipe?
 
-HypeSwipe allows users to:
-1. Connect their MetaMask wallet (EVM + BTC)
-2. Deposit BTC which is automatically converted to USDC
-3. Trade perpetuals with a simple swipe interface (coming soon)
+HypeSwipe is a mobile-first trading experience that turns leverage trading into a swipeable feed. Instead of complex order books and charts, users swipe through position cards—each representing a trade setup with:
 
-## Architecture
+- **Asset**: BTC, ETH, or other majors
+- **Chart**: 4H or 1D pattern visualization
+- **Leverage**: AI-suggested 2x-50x
+- **Direction**: Long or short bias
+- **Sentiment**: AI-summarized news and social signals
+- **Size**: Capped at $10 per swipe
 
-```
-hypeswipe-monorepo/
-├── frontend/          # Next.js app with API routes
-│   ├── app/           # App Router pages and API
-│   ├── components/    # React components
-│   ├── hooks/         # React Query hooks
-│   ├── lib/           # Li.Fi client, vault storage
-│   ├── store/         # Zustand state management
-│   └── types/         # TypeScript types
-├── backend/           # Future dedicated backend (stub)
-└── contracts/         # Future smart contracts (stub)
-```
+Swipe right to bet. Swipe left to skip. That's it.
+
+## Why?
+
+Traditional perps trading has too much friction:
+- Complex UIs designed for pros
+- Analysis paralysis from too many options
+- Fear of large losses discourages participation
+
+HypeSwipe flips this:
+- **Gamified**: Trading feels like a game, not finance
+- **Micro bets**: $10 max per swipe = low stress
+- **High volume**: Quick decisions, many positions
+- **Intuitive**: Visual, emotional, fast
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14, React 18, TypeScript, TailwindCSS
-- **Wallet**: Wagmi v2, Viem
-- **State**: React Query, Zustand
-- **API Integration**: Li.Fi HTTP API
+- **Frontend**: Next.js 14, TypeScript, TailwindCSS
+- **Execution**: Hyperliquid via Peer Protocol
+- **Funding**: Native BTC + Lightning → USDC
+- **Bridging**: Li.Fi for BTC → Hyperliquid USDC
+
+## Funding Options
+
+### 1. Native BTC (Xverse)
+- Connect Xverse wallet
+- Send BTC on-chain
+- Auto-bridged to USDC via Li.Fi
+- ~20 minute settlement
+
+### 2. Lightning (Alby) - Coming Soon
+- Pay Lightning invoice
+- LSAT tokens minted on HyperEVM
+- Instant swap to USDC
+- ~15 second settlement
+
+## Progress
+
+**Done:**
+- [x] EVM wallet connection (MetaMask)
+- [x] BTC wallet connection (Xverse)
+- [x] Li.Fi BTC → USDC bridging
+- [x] Hyperliquid chain support
+- [x] Auto-quote fetching
+- [x] Balance tracking
+
+**Building:**
+- [ ] Lightning integration (LSAT/USDC pool)
+- [ ] Swipe card UI
+- [ ] AI position generation
+- [ ] Peer Protocol integration
+
+**Next:**
+- [ ] Mobile gestures
+- [ ] Position tracking
+- [ ] P&L visualization
+- [ ] Social features
 
 ## Quick Start
 
 ```bash
 # Install dependencies
-cd frontend
 npm install
 
-# Start development server
+# Set up environment
+cp frontend/.env.example frontend/.env.local
+# Add your LIFI_API_KEY
+
+# Run development server
 npm run dev
-
-# Open http://localhost:3000
 ```
-
-## Features (MVP)
-
-### ✅ Implemented
-
-- [x] MetaMask wallet connection (EVM)
-- [x] Manual BTC address input
-- [x] In-memory vault balance tracking
-- [x] Li.Fi quote API integration for BTC → USDC
-- [x] Top-up flow with quote display
-- [x] Simulated deposit crediting
-
-### 🚧 Stubbed (Coming Soon)
-
-- [ ] Real BTC transaction signing
-- [ ] Li.Fi transaction status tracking
-- [ ] Pear Protocol integration
-- [ ] Hyperliquid integration
-- [ ] Swipe-to-trade UI
 
 ## API Routes
 
-### Vault
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/vault` | GET | Get user's USDC balance |
+| `/api/vault/credit` | POST | Credit USDC to user (dev) |
+| `/api/lifi/quote-btc-to-usdc` | POST | Get BTC → USDC quote |
+
+## Architecture
 
 ```
-GET  /api/vault?address=<evmAddress>
-     Returns: { equityUsdc: number }
-
-POST /api/vault/credit
-     Body: { address: string, amountUsdc: number }
-     Returns: { equityUsdc: number }
+User
+  │
+  ├─ Native BTC ──→ Xverse ──→ Li.Fi Bridge ──→ Hyperliquid USDC
+  │                              (~20 min)
+  │
+  └─ Lightning ──→ Alby ──→ LSAT Mint ──→ DEX Swap ──→ Hyperliquid USDC
+                            (~15 sec)
 ```
 
-### Li.Fi Integration
+## Links
 
-```
-POST /api/lifi/quote-btc-to-usdc
-     Body: {
-       btcAddress: string,
-       evmAddress: string,
-       fromAmountSats: string,
-       toChainId: number,      // 1 (Ethereum) or 42161 (Arbitrum)
-       toToken: string         // USDC address
-     }
-     Returns: Li.Fi QuoteResponse with transactionRequest
-```
+- [Hyperliquid Docs](https://hyperliquid.gitbook.io/)
+- [Li.Fi API](https://docs.li.fi/)
+- [Peer Protocol](https://docs.pear.garden/)
 
-## Li.Fi BTC → USDC Flow
+---
 
-Based on [Li.Fi Bitcoin Transaction Example](https://docs.li.fi/introduction/user-flows-and-examples/bitcoin-tx-example):
-
-1. **Get Quote**: Call `/quote` with BTC source and EVM destination
-2. **Transaction Data**: Receive `transactionRequest` with:
-   - `to`: BTC vault address (e.g., ThorSwap vault)
-   - `value`: Amount in satoshis
-   - `data`: Memo containing bridge routing info
-3. **Sign & Send**: User signs BTC transaction in MetaMask
-4. **Track Status**: Poll Li.Fi `/status` endpoint until complete
-5. **Credit**: Once status is DONE, credit user's vault
-
-## Production TODOs
-
-### Security
-- [ ] Add authentication (signature verification)
-- [ ] Rate limiting on API routes
-- [ ] Input sanitization and validation
-
-### Infrastructure
-- [ ] Persistent database (PostgreSQL/Redis)
-- [ ] Background job processing for status tracking
-- [ ] WebSocket for real-time updates
-
-### Features
-- [ ] Real BTC transaction support
-- [ ] Transaction history
-- [ ] Withdrawal functionality
-- [ ] Trading integration
-
-## Environment Variables
-
-```env
-# No env vars required for MVP (using public Li.Fi API)
-
-# Future:
-# DATABASE_URL=
-# REDIS_URL=
-# LIFI_API_KEY=
-# HYPERLIQUID_API_KEY=
-```
-
-## Resources
-
-- [Li.Fi Bitcoin Docs](https://docs.li.fi/introduction/lifi-architecture/bitcoin-overview)
-- [Li.Fi Transaction Example](https://docs.li.fi/introduction/user-flows-and-examples/bitcoin-tx-example)
-- [Wagmi Documentation](https://wagmi.sh/)
-- [TanStack Query](https://tanstack.com/query/latest)
-
-## License
-
-Private - All rights reserved
+**Not financial advice. Gamified leverage trading carries significant risk.**

@@ -5,39 +5,36 @@ import { useVaultBalance } from '@/hooks/useVault';
 import { useUserStore } from '@/store/userStore';
 import { BTC_PRICE_USD } from '@/types';
 
-/**
- * Shorten an address for display
- */
-function shortenAddress(address: string, chars = 6): string {
-  return `${address.slice(0, chars)}...${address.slice(-4)}`;
-}
-
 interface BalanceCardProps {
-  onTopUp: () => void;
-  onSetupBtc: () => void;
+  onDeposit: () => void;
 }
 
-export function BalanceCard({ onTopUp, onSetupBtc }: BalanceCardProps) {
+export function BalanceCard({ onDeposit }: BalanceCardProps) {
   const { address: evmAddress, isConnected } = useAccount();
   const { btcAddress } = useUserStore();
-  const { data: vaultData, isLoading, error } = useVaultBalance(evmAddress || null);
+  const { data: vaultData, isLoading } = useVaultBalance(evmAddress || null);
 
   const equityUsdc = vaultData?.equityUsdc ?? 0;
-  // Convert USDC to BTC equivalent using placeholder price
   const btcEquivalent = equityUsdc / BTC_PRICE_USD;
+
+  // Calculate swipes available ($10 max per swipe)
+  const swipesAvailable = Math.floor(equityUsdc / 10);
 
   if (!isConnected) {
     return (
       <div className="bg-dark-800/50 border border-dark-700 rounded-2xl p-8 text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-dark-700 flex items-center justify-center">
-          <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-          </svg>
+        <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-500/20 to-orange-500/20 flex items-center justify-center">
+          <span className="text-4xl">🎯</span>
         </div>
-        <h3 className="text-lg font-medium text-gray-300 mb-2">Connect Your Wallet</h3>
-        <p className="text-gray-500 text-sm">
-          Connect your MetaMask wallet to view your balance and start trading.
+        <h3 className="text-xl font-semibold text-white mb-2">Ready to Swipe?</h3>
+        <p className="text-gray-400 text-sm mb-6">
+          Connect your wallet to start trading positions like dating profiles
         </p>
+        <div className="inline-flex items-center gap-2 text-xs text-gray-500">
+          <span>Swipe right = bet</span>
+          <span>•</span>
+          <span>Swipe left = skip</span>
+        </div>
       </div>
     );
   }
@@ -45,24 +42,29 @@ export function BalanceCard({ onTopUp, onSetupBtc }: BalanceCardProps) {
   return (
     <div className="bg-dark-800/50 border border-dark-700 rounded-2xl overflow-hidden">
       {/* Header */}
-      <div className="p-6 border-b border-dark-700">
-        <h2 className="text-lg font-semibold text-gray-200">HypeSwipe Balance</h2>
+      <div className="p-6 border-b border-dark-700 bg-gradient-to-r from-primary-500/5 to-orange-500/5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-200">Trading Balance</h2>
+          {swipesAvailable > 0 && (
+            <span className="text-xs bg-primary-500/20 text-primary-400 px-2 py-1 rounded-full">
+              {swipesAvailable} swipes available
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Balance Display */}
       <div className="p-6">
         {isLoading ? (
           <div className="animate-pulse">
-            <div className="h-10 bg-dark-700 rounded w-1/2 mb-2" />
+            <div className="h-12 bg-dark-700 rounded w-1/2 mb-2" />
             <div className="h-5 bg-dark-700 rounded w-1/3" />
           </div>
-        ) : error ? (
-          <div className="text-red-400 text-sm">Failed to load balance</div>
         ) : (
           <div className="space-y-4">
             {/* Main Balance */}
             <div>
-              <div className="text-4xl font-bold text-white mb-1">
+              <div className="text-5xl font-bold text-white mb-1">
                 ${equityUsdc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="text-gray-400 text-sm">
@@ -70,77 +72,65 @@ export function BalanceCard({ onTopUp, onSetupBtc }: BalanceCardProps) {
               </div>
             </div>
 
-            {/* Addresses */}
-            <div className="pt-4 space-y-3">
-              <div className="flex items-center justify-between p-3 bg-dark-900 rounded-lg">
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">EVM Address</p>
-                  <p className="text-sm font-mono text-gray-300">
-                    {evmAddress ? shortenAddress(evmAddress) : '-'}
-                  </p>
+            {/* Quick Stats */}
+            {equityUsdc > 0 && (
+              <div className="grid grid-cols-2 gap-3 pt-4">
+                <div className="p-3 bg-dark-900 rounded-lg">
+                  <p className="text-xs text-gray-500 mb-1">Max per swipe</p>
+                  <p className="text-lg font-semibold text-white">$10</p>
                 </div>
-                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-                  <span className="text-xs text-blue-400">ETH</span>
+                <div className="p-3 bg-dark-900 rounded-lg">
+                  <p className="text-xs text-gray-500 mb-1">Available swipes</p>
+                  <p className="text-lg font-semibold text-primary-400">{swipesAvailable}</p>
                 </div>
               </div>
+            )}
 
-              <div className="flex items-center justify-between p-3 bg-dark-900 rounded-lg">
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">BTC Address</p>
-                  {btcAddress ? (
-                    <p className="text-sm font-mono text-gray-300">
-                      {shortenAddress(btcAddress, 8)}
+            {/* Connected Info */}
+            {btcAddress && (
+              <div className="pt-4 border-t border-dark-700">
+                <div className="flex items-center justify-between p-3 bg-dark-900 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className="text-orange-400">₿</span>
+                    <p className="text-sm font-mono text-gray-400">
+                      {btcAddress.slice(0, 8)}...{btcAddress.slice(-6)}
                     </p>
-                  ) : (
-                    <button
-                      onClick={onSetupBtc}
-                      className="text-sm text-primary-400 hover:text-primary-300"
-                    >
-                      Set up BTC address →
-                    </button>
-                  )}
-                </div>
-                <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center">
-                  <span className="text-xs text-orange-400">BTC</span>
+                  </div>
+                  <span className="text-xs text-green-400">Connected</span>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
 
       {/* Actions */}
-      <div className="p-6 pt-0">
+      <div className="p-6 pt-0 space-y-3">
         <button
-          onClick={onTopUp}
-          disabled={!btcAddress}
-          className="w-full px-4 py-3 bg-primary-500 hover:bg-primary-600 disabled:bg-dark-700 disabled:text-gray-500 rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+          onClick={onDeposit}
+          className="w-full px-4 py-4 bg-gradient-to-r from-orange-500 to-primary-500 hover:from-orange-600 hover:to-primary-600 rounded-xl font-semibold text-lg transition-all flex items-center justify-center gap-3 shadow-lg shadow-orange-500/20"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Top up with BTC
+          <span className="text-xl">₿</span>
+          {equityUsdc > 0 ? 'Add More Funds' : 'Fund Account'}
         </button>
-        {!btcAddress && (
-          <p className="text-xs text-gray-500 text-center mt-2">
-            Set up your BTC address first to enable deposits
+        
+        {equityUsdc === 0 && (
+          <p className="text-xs text-gray-500 text-center">
+            Native BTC or Lightning → Instant USDC
           </p>
         )}
-      </div>
 
-      {/* Future Trading Section Stub */}
-      <div className="p-6 pt-0">
-        <div className="p-4 bg-dark-900/50 border border-dashed border-dark-600 rounded-xl">
-          <div className="flex items-center gap-3 text-gray-500">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-            <div>
-              <p className="text-sm font-medium">Swipe Trading</p>
-              <p className="text-xs">Coming soon - Pear/Hyperliquid integration</p>
-            </div>
-          </div>
-        </div>
+        {/* Start Trading Button (when funded) */}
+        {equityUsdc > 0 && (
+          <button
+            disabled
+            className="w-full px-4 py-3 bg-dark-700 text-gray-400 rounded-xl font-medium flex items-center justify-center gap-2 cursor-not-allowed"
+          >
+            <span>👆</span>
+            Start Swiping
+            <span className="text-xs bg-dark-600 px-2 py-0.5 rounded ml-2">Soon</span>
+          </button>
+        )}
       </div>
     </div>
   );

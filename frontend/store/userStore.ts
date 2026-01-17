@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 interface UserStore {
-  // BTC address (manually entered by user since MetaMask doesn't expose it yet)
+  // BTC address (auto-detected from MetaMask or manually entered)
   btcAddress: string | null;
   setBtcAddress: (address: string | null) => void;
 
