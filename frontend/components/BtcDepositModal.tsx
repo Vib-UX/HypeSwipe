@@ -23,7 +23,7 @@ type LightningStatus = 'idle' | 'creating' | 'paying' | 'verifying' | 'success' 
 
 // Default to Hyperliquid for trading
 const DEFAULT_CHAIN = SUPPORTED_EVM_CHAINS.find(c => c.id === HYPERLIQUID_CHAIN_ID) || SUPPORTED_EVM_CHAINS[0];
-const DEFAULT_AMOUNT_BTC = '0.001';
+const DEFAULT_AMOUNT_BTC = '0.0001';
 
 // Debounce delay for quote fetching
 const QUOTE_DEBOUNCE_MS = 800;
@@ -371,7 +371,7 @@ export function BtcDepositModal({ isOpen, onClose }: BtcDepositModalProps) {
                   <div className="relative">
                     <input
                       type="number"
-                      step="0.001"
+                      step="0.0001"
                       min="0.0001"
                       value={btcAmount}
                       onChange={(e) => setBtcAmount(e.target.value)}
@@ -387,7 +387,7 @@ export function BtcDepositModal({ isOpen, onClose }: BtcDepositModalProps) {
 
                 {/* Quick Amounts */}
                 <div className="flex gap-2">
-                  {[0.001, 0.005, 0.01, 0.02].map((amt) => (
+                  {[0.0001, 0.0005, 0.001, 0.005].map((amt) => (
                     <button
                       key={amt}
                       onClick={() => setBtcAmount(amt.toString())}

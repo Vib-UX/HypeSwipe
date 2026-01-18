@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { createChart, IChartApi, CandlestickSeries, LineSeries } from 'lightweight-charts';
+import { createChart, IChartApi, CandlestickSeries, LineSeries, UTCTimestamp } from 'lightweight-charts';
 import type { CandleData } from '@/types/trade';
 
 interface MiniChartProps {
@@ -12,12 +12,12 @@ interface MiniChartProps {
 // Simple EMA calculation
 function calculateEMA(data: CandleData[], period: number) {
   const k = 2 / (period + 1);
-  const emaData: { time: number; value: number }[] = [];
+  const emaData: { time: UTCTimestamp; value: number }[] = [];
   let ema = data[0]?.close || 0;
 
   for (const candle of data) {
     ema = candle.close * k + ema * (1 - k);
-    emaData.push({ time: candle.time, value: ema });
+    emaData.push({ time: candle.time as UTCTimestamp, value: ema });
   }
 
   return emaData;
@@ -69,7 +69,7 @@ export function MiniChart({ candles, direction }: MiniChartProps) {
     });
 
     const chartData = candles.map((c) => ({
-      time: c.time as number,
+      time: c.time as UTCTimestamp,
       open: c.open,
       high: c.high,
       low: c.low,
