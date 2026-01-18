@@ -7,6 +7,7 @@ import { useToast } from "@/providers/ToastProvider";
 import { HyperliquidSDK } from "@/lib/hyperliquid";
 
 const BUILDER_CODE_ADDRESS = "0xA47D4d99191db54A4829cdf3de2417E527c3b042";
+const REQUIRED_MAX_RATE_FEE_FOR_BUILDER = 60;
 
 export interface BuilderApprovalResult {
   success: boolean;
@@ -39,7 +40,7 @@ export function useBuilderApproval() {
         BUILDER_CODE_ADDRESS,
       );
 
-      const isApproved = res > 0;
+      const isApproved = res >= REQUIRED_MAX_RATE_FEE_FOR_BUILDER;
       setBuilderApproved(isApproved);
 
       return { isApproved, currentMaxFee: res };
@@ -83,14 +84,14 @@ export function useBuilderApproval() {
         BUILDER_CODE_ADDRESS,
       );
 
-      if (currentFee > 0) {
+      if (currentFee > REQUIRED_MAX_RATE_FEE_FOR_BUILDER) {
         setBuilderApproved(true);
         return { success: true };
       }
 
       const res = await hyperliquid.approveBuilderFee(
         BUILDER_CODE_ADDRESS,
-        "0.01%",
+        `${REQUIRED_MAX_RATE_FEE_FOR_BUILDER / 1000}%`,
       );
 
       if (res.status === "err") {
