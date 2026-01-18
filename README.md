@@ -15,6 +15,28 @@ HypeSwipe is a mobile-first trading experience that turns leverage trading into 
 
 Swipe right to bet. Swipe left to skip. That's it.
 
+## Live Transactions
+
+Proof of working funding flows:
+
+| Method | Transaction | Explorer |
+|--------|-------------|----------|
+| Lightning | 10 sats deposit | Alby WebLN |
+| Arbitrum → Hyperliquid | 2.44 USDC bridge | [Arbiscan](https://arbiscan.io/tx/0xb793382502c5d5b63ef714fa1b1d3dbbe044ef1b5710bd1ef17cf68655b48822) |
+| Bitcoin (on-chain) | SegWit + Taproot | [Mempool](https://mempool.space/tx/f6bf9f1b67729c5cd7dd526700c3714cca9a5f6bd079f2e54d58c8945d0cab3a) |
+
+### Lightning Payment
+<img width="400" alt="Lightning Payment" src="https://github.com/user-attachments/assets/39d13aa5-78cb-4390-9095-c40adea3f2ed" />
+
+### Arbitrum → Hyperliquid Bridge
+<img width="800" alt="Arbitrum Bridge" src="https://github.com/user-attachments/assets/d98643ff-fbf2-45bd-9964-9972f3131965" />
+
+### Bitcoin On-Chain Transaction
+<img width="800" alt="Bitcoin Transaction" src="https://github.com/user-attachments/assets/9c21caa1-c27c-4895-9e08-b7843951f2b4" />
+
+### Pear Protocol APIs
+<img width="800" alt="Pear Protocol" src="https://github.com/user-attachments/assets/d3db8b27-8beb-4da0-98a6-15952ddea262" />
+
 ## Why?
 
 Traditional perps trading has too much friction:
@@ -31,7 +53,7 @@ HypeSwipe flips this:
 ## Tech Stack
 
 - **Frontend**: Next.js 14, TypeScript, TailwindCSS
-- **Execution**: Hyperliquid via Peer Protocol
+- **Execution**: Hyperliquid via Pear Protocol
 - **Funding**: Native BTC, Lightning, Arbitrum USDC
 - **Bridging**: Li.Fi Widget for cross-chain swaps
 
@@ -54,16 +76,6 @@ HypeSwipe flips this:
 - Bridge USDC directly to Hyperliquid L1
 - One-click deposit to perps account
 - **~2 minute settlement**
-
-## Live Transactions
-
-Proof of working funding flows:
-
-| Method | Transaction | Explorer |
-|--------|-------------|----------|
-| Lightning | 10 sats deposit | [Alby WebLN] |
-| Arbitrum → Hyperliquid | 2.44 USDC bridge | [Arbiscan](https://arbiscan.io/tx/0xb793382502c5d5b63ef714fa1b1d3dbbe044ef1b5710bd1ef17cf68655b48822) |
-| Bitcoin (on-chain) | SegWit + Taproot | [Mempool](https://mempool.space/tx/f6bf9f1b67729c5cd7dd526700c3714cca9a5f6bd079f2e54d58c8945d0cab3a) |
 
 ## Features
 
