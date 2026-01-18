@@ -2,6 +2,13 @@
 
 **Tinder for Trading.** Swipe through positions, bet small, think fast. Built on Hyperliquid.
 
+## Prerequisites
+
+Before using HypeSwipe, you need:
+
+1. **Hyperliquid Account** — Create an account at [app.hyperliquid.xyz/portfolio](https://app.hyperliquid.xyz/portfolio)
+2. **Arbitrum Network** — Set your wallet to the Arbitrum chain for bridging USDC to Hyperliquid
+
 ## What is HypeSwipe?
 
 HypeSwipe is a mobile-first trading experience that turns leverage trading into a swipeable feed. Instead of complex order books and charts, users swipe through position cards—each representing a trade setup with:
@@ -92,13 +99,6 @@ HypeSwipe flips this:
 - [x] Real-time vault balance updates
 - [x] Swipe card UI with charts
 - [x] AI market signal generation
-
-## Prerequisites
-
-Before using HypeSwipe, you need:
-
-1. **Hyperliquid Account** — Create an account at [app.hyperliquid.xyz/portfolio](https://app.hyperliquid.xyz/portfolio)
-2. **Arbitrum Network** — Set your wallet to the Arbitrum chain for bridging USDC to Hyperliquid
 
 ## Quick Start
 
