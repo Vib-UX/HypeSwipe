@@ -2,10 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ConnectButton } from '@/components/ConnectButton';
+import { useAccount } from 'wagmi';
+import { AuthStatusIndicator } from '@/components/AuthStatusIndicator';
+import { useUserStore } from '@/store/userStore';
 
 export function Header() {
   const pathname = usePathname();
+  const { isConnected } = useAccount();
+  const getAuthStatus = useUserStore((state) => state.getAuthStatus);
+  const authStatus = getAuthStatus(isConnected);
+  const isReadyToTrade = authStatus === 'ready_to_trade';
 
   return (
     <header className="border-b border-dark-800">
@@ -35,20 +41,29 @@ export function Header() {
             >
               Wallet
             </Link>
-            <Link
-              href="/swipe"
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                pathname === '/swipe'
-                  ? 'bg-primary-500/20 text-primary-400'
-                  : 'text-gray-400 hover:text-gray-200'
-              }`}
-            >
-              🔥 Swipe
-            </Link>
+            {isReadyToTrade ? (
+              <Link
+                href="/swipe"
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  pathname === '/swipe'
+                    ? 'bg-primary-500/20 text-primary-400'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                🔥 Swipe
+              </Link>
+            ) : (
+              <span
+                className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 cursor-not-allowed"
+                title="Complete setup to unlock"
+              >
+                🔒 Swipe
+              </span>
+            )}
           </nav>
         </div>
 
-        <ConnectButton />
+        <AuthStatusIndicator />
       </div>
     </header>
   );

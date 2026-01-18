@@ -1,6 +1,7 @@
 "use client";
 
-import { useAccount } from "wagmi";
+import { useRouter } from "next/navigation";
+import { useAccount, useDisconnect } from "wagmi";
 import { useUserStore, AuthStatus } from "@/store/userStore";
 
 function shortenAddress(address: string): string {
@@ -87,11 +88,15 @@ const STATUS_CONFIG: Record<AuthStatus, StatusConfig> = {
  *
  */
 export function AuthStatusIndicator() {
+  const router = useRouter();
   const { isConnected, address } = useAccount();
+  const { disconnect } = useDisconnect();
   const getAuthStatus = useUserStore((state) => state.getAuthStatus);
+  const resetPearAuth = useUserStore((state) => state.resetPearAuth);
 
   const authStatus = getAuthStatus(isConnected);
   const config = STATUS_CONFIG[authStatus];
+  const isReadyToTrade = authStatus === "ready_to_trade";
 
   const displayLabel = (() => {
     if (isConnected && address && authStatus !== "not_connected") {
@@ -100,19 +105,64 @@ export function AuthStatusIndicator() {
     return config.label;
   })();
 
+  const handleClick = () => {
+    if (!isReadyToTrade) {
+      router.push("/auth");
+    }
+  };
+
+  const handleDisconnect = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    disconnect();
+    resetPearAuth();
+  };
+
   return (
-    <div
-      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors
-        ${config.bgColor} ${config.borderColor} ${config.color}`}
-    >
-      <span className="flex items-center gap-2">
-        {config.isComplete ? (
-          <CheckmarkIcon className={config.color} />
-        ) : (
-          <span className={`w-2 h-2 rounded-full ${config.dotColor}`} />
-        )}
-        {displayLabel}
-      </span>
+    <div className="flex items-center gap-2">
+      <button
+        onClick={handleClick}
+        disabled={isReadyToTrade}
+        aria-label={
+          isReadyToTrade
+            ? `Status: ${config.label}`
+            : `Status: ${config.label}. Click to complete authentication.`
+        }
+        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors
+          ${config.bgColor} ${config.borderColor} ${config.color}
+          ${isReadyToTrade ? "cursor-default" : "cursor-pointer hover:opacity-80"}`}
+      >
+        <span className="flex items-center gap-2">
+          {config.isComplete ? (
+            <CheckmarkIcon className={config.color} />
+          ) : (
+            <span className={`w-2 h-2 rounded-full ${config.dotColor}`} />
+          )}
+          {displayLabel}
+        </span>
+      </button>
+
+      {isConnected && (
+        <button
+          onClick={handleDisconnect}
+          aria-label="Disconnect wallet"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

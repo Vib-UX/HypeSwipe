@@ -1,18 +1,32 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
 import { Header } from '@/components/Header';
 import { SwipeCard } from '@/components/SwipeCard';
-import { generateTradeScenarios, type TradeCard, type CandleData } from '@/types/trade';
+import { useUserStore } from '@/store/userStore';
+import { generateTradeScenarios, type TradeCard } from '@/types/trade';
 
 const SIZE_OPTIONS = [5, 7, 10] as const;
 
 export default function SwipePage() {
+  const router = useRouter();
+  const { isConnected } = useAccount();
+  const getAuthStatus = useUserStore((state) => state.getAuthStatus);
+  const authStatus = getAuthStatus(isConnected);
+
   const [trades, setTrades] = useState<TradeCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [stats, setStats] = useState({ taken: 0, skipped: 0 });
   const [size, setSize] = useState<number>(10);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (authStatus !== 'ready_to_trade') {
+      router.replace('/auth');
+    }
+  }, [authStatus, router]);
 
   // Fetch real candles from Hyperliquid (news is hardcoded in mock data)
   useEffect(() => {
@@ -68,6 +82,17 @@ export default function SwipePage() {
 
   const remainingTrades = trades.slice(currentIndex);
   const isFinished = !loading && currentIndex >= trades.length;
+
+  if (authStatus !== 'ready_to_trade') {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-gray-400">Redirecting to setup...</div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
