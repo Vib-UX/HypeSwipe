@@ -1,22 +1,17 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import type { PearMarket } from '@/types/trade';
 
-/**
- * Response type from the /api/markets endpoint
- */
-interface MarketsResponse {
+export interface MarketsResponse {
   markets: PearMarket[];
-  cached: boolean;
-  timestamp: string;
+  page: number;
+  totalPages: number;
+  hasMore: boolean;
 }
 
-/**
- * Fetch markets data from the API
- */
-async function fetchMarkets(): Promise<MarketsResponse> {
-  const response = await fetch('/api/markets');
+async function fetchMarkets(page: number): Promise<MarketsResponse> {
+  const response = await fetch(`/api/markets?page=${page}`);
 
   if (!response.ok) {
     const error = await response.json();
@@ -26,16 +21,17 @@ async function fetchMarkets(): Promise<MarketsResponse> {
   return response.json();
 }
 
-/**
- * Hook to fetch Pear Protocol markets data
- *
- * Uses React Query with a 3-minute stale time to align with
- * the server-side cache TTL.
- */
 export function useMarkets() {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ['markets'],
-    queryFn: fetchMarkets,
-    staleTime: 3 * 60 * 1000, // 3 minutes
+    queryFn: ({ pageParam }) => fetchMarkets(pageParam),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.hasMore) {
+        return lastPage.page + 1;
+      }
+      return undefined;
+    },
+    staleTime: 3 * 60 * 1000,
   });
 }

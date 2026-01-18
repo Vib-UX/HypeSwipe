@@ -1,134 +1,112 @@
 import { NextResponse } from "next/server";
-import { pearApiRequest, PearApiException } from "@/lib/pear-api";
 import { detectPositionType, generateDisplayName } from "@/lib/market-utils";
 import type { PearMarket, MarketAsset } from "@/types/trade";
 
+const PEAR_API_BASE_URL = "https://hl-v2.pearprotocol.io";
+const DEFAULT_PAGE_SIZE = 5;
+
 interface RawPearMarket {
-  longAssets: MarketAsset[];
-  shortAssets: MarketAsset[];
-  openInterest: string;
-  volume: string;
-  ratio: string;
-  change24h: string;
-  weightedChange24h: string;
-  netFunding: string;
+  name: string;
+  openInterest?: number;
+  volume?: number;
+  ratio?: number | null;
+  change24h?: number | null;
+  weightedChange24h?: number | null;
+  netFunding?: number;
 }
 
-interface PearMarketResponse {
-  markets: RawPearMarket[];
-}
+function parseMarketName(name: string): { longAssets: MarketAsset[]; shortAssets: MarketAsset[] } {
+  const longAssets: MarketAsset[] = [];
+  const shortAssets: MarketAsset[] = [];
 
-const CACHE_TTL_MS = 3 * 60 * 1000;
+  const parts = name.split("|");
 
-interface CacheEntry {
-  data: PearMarket[];
-  timestamp: number;
-}
-
-let marketsCache: CacheEntry | null = null;
-
-function isCacheValid(): boolean {
-  if (!marketsCache) {
-    return false;
+  for (const part of parts) {
+    if (part.startsWith("L:")) {
+      const assets = part.slice(2).split(",");
+      const weight = 100 / assets.length;
+      for (const asset of assets) {
+        if (asset.trim()) {
+          longAssets.push({ asset: asset.trim(), weight });
+        }
+      }
+    } else if (part.startsWith("S:")) {
+      const assets = part.slice(2).split(",");
+      const weight = 100 / assets.length;
+      for (const asset of assets) {
+        if (asset.trim()) {
+          shortAssets.push({ asset: asset.trim(), weight });
+        }
+      }
+    }
   }
-  const now = Date.now();
-  return now - marketsCache.timestamp < CACHE_TTL_MS;
+
+  return { longAssets, shortAssets };
 }
 
-/**
- * Transform raw Pear API response to internal PearMarket format.
- * Calculates positionType and generates displayName for each market.
- */
 function transformMarkets(rawMarkets: RawPearMarket[]): PearMarket[] {
   return rawMarkets.map((market) => {
-    const positionType = detectPositionType(
-      market.longAssets,
-      market.shortAssets,
-    );
-    const displayName = generateDisplayName(
-      market.longAssets,
-      market.shortAssets,
-      positionType,
-    );
+    const { longAssets, shortAssets } = parseMarketName(market.name);
+
+    const positionType = detectPositionType(longAssets, shortAssets);
+    const displayName = generateDisplayName(longAssets, shortAssets, positionType);
 
     return {
-      longAssets: market.longAssets,
-      shortAssets: market.shortAssets,
-      openInterest: market.openInterest,
-      volume: market.volume,
-      ratio: market.ratio,
-      change24h: market.change24h,
-      weightedChange24h: market.weightedChange24h,
-      netFunding: market.netFunding,
+      longAssets,
+      shortAssets,
+      openInterest: String(market.openInterest ?? 0),
+      volume: String(market.volume ?? 0),
+      ratio: String(market.ratio ?? 0),
+      change24h: String(market.weightedChange24h ?? market.change24h ?? 0),
+      weightedChange24h: String(market.weightedChange24h ?? 0),
+      netFunding: String(market.netFunding ?? 0),
       positionType,
       displayName,
     };
   });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    if (isCacheValid() && marketsCache) {
-      return NextResponse.json({ markets: marketsCache.data });
-    }
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1", 10);
 
-    const data = await pearApiRequest<PearMarketResponse>(
-      "/markets",
-      { method: "GET" },
-      false,
+    const response = await fetch(
+      `${PEAR_API_BASE_URL}/markets?page=${page}&pageSize=${DEFAULT_PAGE_SIZE}&engine=hyperliquid`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
     );
 
-    const transformedMarkets = transformMarkets(data.markets);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Pear API error: ${response.status}`);
+    }
 
-    marketsCache = {
-      data: transformedMarkets,
-      timestamp: Date.now(),
-    };
+    const data = await response.json();
+    const rawMarkets: RawPearMarket[] = data.markets ?? [];
+    const transformedMarkets = transformMarkets(rawMarkets);
 
-    return NextResponse.json({ markets: transformedMarkets });
+    return NextResponse.json({
+      markets: transformedMarkets,
+      page: data.page ?? page,
+      totalPages: data.totalPages ?? 1,
+      hasMore: page < (data.totalPages ?? 1),
+    });
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
-    const errorStack = error instanceof Error ? error.stack : undefined;
-    console.error("Markets fetch error:", {
-      message: errorMessage,
-      stack: errorStack,
-      timestamp: new Date().toISOString(),
-    });
-
-    if (marketsCache) {
-      const cacheAgeMs = Date.now() - marketsCache.timestamp;
-      const cacheAgeMinutes = Math.round(cacheAgeMs / 60000);
-      console.warn(
-        `Returning stale cache data (${cacheAgeMinutes} minutes old) due to fetch error: ${errorMessage}`,
-      );
-      return NextResponse.json({
-        markets: marketsCache.data,
-        stale: true,
-        cacheAgeMinutes,
-      });
-    }
-
-    if (error instanceof PearApiException) {
-      console.error(
-        `PearApiException: status=${error.statusCode}, details=`,
-        error.details,
-      );
-      return NextResponse.json(
-        {
-          error: error.message,
-          code: "PEAR_API_ERROR",
-        },
-        { status: error.statusCode },
-      );
-    }
+    console.error("Markets fetch error:", errorMessage);
 
     return NextResponse.json(
       {
-        error: "Failed to fetch markets. Please try again later.",
+        error: errorMessage || "Failed to fetch markets. Please try again later.",
         code: "MARKETS_FETCH_ERROR",
       },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

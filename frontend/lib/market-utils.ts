@@ -64,11 +64,11 @@ function hasMeaningfulWeight(assets: MarketAsset[]): boolean {
  * ); // Returns "one_directional"
  */
 export function detectPositionType(
-  longAssets: MarketAsset[],
-  shortAssets: MarketAsset[]
+  longAssets: MarketAsset[] | undefined,
+  shortAssets: MarketAsset[] | undefined
 ): PositionType {
-  const longHasMeaningfulWeight = hasMeaningfulWeight(longAssets);
-  const shortHasMeaningfulWeight = hasMeaningfulWeight(shortAssets);
+  const longHasMeaningfulWeight = hasMeaningfulWeight(longAssets || []);
+  const shortHasMeaningfulWeight = hasMeaningfulWeight(shortAssets || []);
 
   if (longHasMeaningfulWeight && shortHasMeaningfulWeight) {
     return "relative_pair";
@@ -105,27 +105,32 @@ export function detectPositionType(
  * ); // Returns "BTC LONG"
  */
 export function generateDisplayName(
-  longAssets: MarketAsset[],
-  shortAssets: MarketAsset[],
+  longAssets: MarketAsset[] | undefined,
+  shortAssets: MarketAsset[] | undefined,
   positionType: PositionType
 ): string {
-  if (positionType === "relative_pair") {
-    const longAssetNames = longAssets.map((a) => a.asset).join("+");
-    const shortAssetNames = shortAssets.map((a) => a.asset).join("+");
-    const longWeight = Math.round(calculateTotalWeight(longAssets));
-    const shortWeight = Math.round(calculateTotalWeight(shortAssets));
+  const safeLongAssets = longAssets || [];
+  const safeShortAssets = shortAssets || [];
 
-    return `${longAssetNames} vs ${shortAssetNames} (${longWeight}%-${shortWeight}%)`;
+  if (positionType === "relative_pair") {
+    const longAssetNames = safeLongAssets.map((a) => a.asset).join("+") || "UNKNOWN";
+    const shortAssetNames = safeShortAssets.map((a) => a.asset).join("+") || "UNKNOWN";
+
+    return `${longAssetNames} vs ${shortAssetNames}`;
   }
 
   // One-directional position
-  const longHasWeight = hasMeaningfulWeight(longAssets);
+  const longHasWeight = hasMeaningfulWeight(safeLongAssets);
 
-  if (longHasWeight) {
-    const assetName = longAssets.map((a) => a.asset).join("+");
+  if (longHasWeight && safeLongAssets.length > 0) {
+    const assetName = safeLongAssets.map((a) => a.asset).join("+");
     return `${assetName} LONG`;
   }
 
-  const assetName = shortAssets.map((a) => a.asset).join("+");
-  return `${assetName} SHORT`;
+  if (safeShortAssets.length > 0) {
+    const assetName = safeShortAssets.map((a) => a.asset).join("+");
+    return `${assetName} SHORT`;
+  }
+
+  return "UNKNOWN MARKET";
 }

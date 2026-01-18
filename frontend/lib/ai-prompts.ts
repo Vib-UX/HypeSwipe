@@ -6,7 +6,7 @@
  * with aggressive leverage suggestions.
  */
 
-import type { PositionType } from "@/types/trade";
+import type { PositionType, PearMarket, AITradeIdea } from "@/types/trade";
 
 /**
  * Input parameters for generating market analysis prompts.
@@ -255,4 +255,143 @@ export function parseAIResponse(
   }
 
   return result;
+}
+
+/**
+ * System prompt for batch market analysis.
+ * Mercury acts as a trading strategist creating unique opportunities.
+ */
+const BATCH_SYSTEM_PROMPT = `You are a crypto trading analyst for HypeSwipe, a Tinder-style perpetual trading app.
+
+Provide a title for each trade. Keep it natural - sometimes include the asset name, sometimes don't. Whatever fits.
+
+Examples of good titles: "Momentum Play", "BTC Breakout", "Funding Arb", "Range Break", "Trend Reversal", "SOL Looking Strong"
+
+Be aggressive with leverage (10-20x) when signals are strong. Consider funding rates, volume, momentum.
+
+Respond with valid JSON array.`;
+
+/**
+ * Input for batch market analysis.
+ */
+export interface BatchMarketInput {
+  markets: PearMarket[];
+}
+
+/**
+ * Format a single market for the batch prompt.
+ */
+function formatMarketForBatch(market: PearMarket, index: number): string {
+  const longAssets = market.longAssets.map(a => a.asset).join(", ");
+  const shortAssets = market.shortAssets.map(a => a.asset).join(", ");
+
+  const positionDesc = market.positionType === "relative_pair"
+    ? `Long: [${longAssets}] vs Short: [${shortAssets}]`
+    : longAssets ? `Long: [${longAssets}]` : `Short: [${shortAssets}]`;
+
+  return `[${index}] ${market.displayName}
+  Position: ${positionDesc}
+  Type: ${market.positionType}
+  24h Change: ${parseFloat(market.change24h).toFixed(2)}%
+  Volume: $${(parseFloat(market.volume) / 1_000_000).toFixed(2)}M
+  Open Interest: $${(parseFloat(market.openInterest) / 1_000_000).toFixed(2)}M
+  Net Funding: ${parseFloat(market.netFunding).toFixed(4)}%`;
+}
+
+/**
+ * Generate prompts for batch market analysis.
+ */
+export function generateBatchMarketPrompts(input: BatchMarketInput): GeneratedPrompts {
+  const marketsSection = input.markets
+    .map((m, i) => formatMarketForBatch(m, i))
+    .join("\n\n");
+
+  const userPrompt = `Analyze these ${input.markets.length} markets and create compelling trade opportunities:
+
+${marketsSection}
+
+For EACH market, provide:
+1. A catchy title (be creative - can be short or longer, just make it good)
+2. Direction (LONG or SHORT) - for relative_pair, direction indicates which side you favor
+3. Leverage (2-20x based on conviction)
+4. Short sentiment summary (1-2 punchy sentences)
+5. Bullish percentage (0-100, your confidence)
+6. Brief reasoning
+
+Respond with a JSON array in exactly this format:
+[
+  {
+    "marketIndex": number (0-indexed reference to market above),
+    "tagline": "string (creative title for the trade)",
+    "direction": "LONG" | "SHORT",
+    "leverage": number (2-20),
+    "sentiment": "string (1-2 sentences, punchy)",
+    "bullishPercent": number (0-100),
+    "reasoning": "string (brief explanation)"
+  }
+]
+
+Return ALL markets - users will swipe through each one.`;
+
+  return {
+    systemPrompt: BATCH_SYSTEM_PROMPT,
+    userPrompt,
+  };
+}
+
+/**
+ * Parse batch AI response into array of trade ideas.
+ */
+export function parseBatchAIResponse(responseText: string): AITradeIdea[] {
+  let parsed: unknown;
+
+  try {
+    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) {
+      throw new Error("No JSON array found in response");
+    }
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error(`Failed to parse batch AI response as JSON: ${responseText.slice(0, 300)}`);
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("AI response is not a valid array");
+  }
+
+  return parsed.map((item, idx) => {
+    const data = item as Record<string, unknown>;
+
+    if (typeof data.marketIndex !== "number") {
+      throw new Error(`Invalid 'marketIndex' at item ${idx}`);
+    }
+    if (typeof data.tagline !== "string" || data.tagline.length === 0) {
+      throw new Error(`Invalid 'tagline' at item ${idx}`);
+    }
+    if (data.direction !== "LONG" && data.direction !== "SHORT") {
+      throw new Error(`Invalid 'direction' at item ${idx}`);
+    }
+    if (typeof data.leverage !== "number") {
+      throw new Error(`Invalid 'leverage' at item ${idx}`);
+    }
+    if (typeof data.sentiment !== "string") {
+      throw new Error(`Invalid 'sentiment' at item ${idx}`);
+    }
+    if (typeof data.bullishPercent !== "number") {
+      throw new Error(`Invalid 'bullishPercent' at item ${idx}`);
+    }
+    if (typeof data.reasoning !== "string") {
+      throw new Error(`Invalid 'reasoning' at item ${idx}`);
+    }
+
+    return {
+      marketIndex: data.marketIndex,
+      tagline: data.tagline.slice(0, 100),
+      direction: data.direction,
+      leverage: Math.max(2, Math.min(20, Math.round(data.leverage))),
+      sentiment: data.sentiment.slice(0, 500),
+      bullishPercent: Math.max(0, Math.min(100, Math.round(data.bullishPercent))),
+      reasoning: data.reasoning.slice(0, 1000),
+    };
+  });
 }
