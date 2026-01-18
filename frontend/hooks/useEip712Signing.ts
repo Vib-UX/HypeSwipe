@@ -1,7 +1,6 @@
 'use client';
 
 import { useAccount, useSignTypedData } from 'wagmi';
-import { useToast } from '@/providers/ToastProvider';
 
 export interface Eip712Message {
   domain: {
@@ -34,7 +33,6 @@ export interface PearAuthResult {
 export function useEip712Signing() {
   const { address } = useAccount();
   const { signTypedDataAsync } = useSignTypedData();
-  const { showToast } = useToast();
 
   const signEip712Message = async (
     eip712Data: Eip712Message
@@ -56,13 +54,10 @@ export function useEip712Signing() {
         timestamp: eip712Data.timestamp,
       };
     } catch (error) {
+      // Re-throw with consistent error message for user rejection
       if (error instanceof Error && error.name === 'UserRejectedRequestError') {
-        showToast('Signature rejected by user', 'error');
         throw new Error('User rejected signature');
       }
-
-      const errorMessage = error instanceof Error ? error.message : 'Failed to sign message';
-      showToast(errorMessage, 'error');
       throw error;
     }
   };
