@@ -22,6 +22,105 @@ HypeSwipe is a mobile-first trading experience that turns leverage trading into 
 
 Swipe right to bet. Swipe left to skip. That's it.
 
+## Lightning Integration Adapter (LSAT + HTLC)
+
+The Lightning adapter uses a trustless atomic swap pattern combining **LSATs** (Lightning Service Authentication Tokens) on HyperEVM with **HTLCs** (Hashed Timelock Contracts) to enable instant BTC → USDC swaps.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Alby as Alby/WebLN
+    participant LiFi as LiFi Node
+    participant HyperEVM as HyperEVM (LSAT Contract)
+    participant HL as Hyperliquid L1
+
+    Note over User,HL: Phase 1: Invoice Generation & HTLC Setup
+    
+    User->>LiFi: Request deposit (amount in sats)
+    LiFi->>LiFi: Generate preimage (secret)
+    LiFi->>LiFi: Compute hash = SHA256(preimage)
+    LiFi->>HyperEVM: Deploy HTLC with hash<br/>Lock USDC equivalent
+    HyperEVM-->>LiFi: HTLC address + LSAT token
+    LiFi->>LiFi: Create Bolt11 invoice<br/>with payment_hash = hash
+    LiFi-->>User: Return invoice + LSAT token
+
+    Note over User,HL: Phase 2: Lightning Payment
+    
+    User->>Alby: Pay Bolt11 invoice
+    Alby->>LiFi: HTLC route payment
+    LiFi->>LiFi: Reveal preimage to claim BTC
+    Alby-->>User: Payment success + preimage
+
+    Note over User,HL: Phase 3: USDC Claim via HTLC
+    
+    User->>HyperEVM: Claim HTLC with preimage + LSAT
+    HyperEVM->>HyperEVM: Verify SHA256(preimage) == hash
+    HyperEVM->>HyperEVM: Verify LSAT authorization
+    HyperEVM->>HL: Release USDC to user's Hyperliquid address
+    HL-->>User: USDC credited to perps account
+
+    Note over User,HL: Phase 4: Settlement
+    
+    LiFi->>LiFi: BTC received via Lightning ✓
+    LiFi->>LiFi: USDC released from HTLC ✓
+    Note over LiFi: Atomic swap complete<br/>LiFi holds BTC, User holds USDC
+```
+
+### How It Works
+
+| Step | Actor | Action | Security |
+|------|-------|--------|----------|
+| 1 | LiFi Node | Generates secret preimage & hash | Preimage kept secret |
+| 2 | LiFi Node | Locks USDC in HTLC on HyperEVM | Timelock + hashlock |
+| 3 | LiFi Node | Creates Bolt11 invoice with same hash | Hash links both HTLCs |
+| 4 | User | Pays Lightning invoice via Alby | Reveals preimage |
+| 5 | User | Claims USDC using revealed preimage | Trustless atomic swap |
+| 6 | LiFi Node | Settles BTC from Lightning payment | Already received |
+
+### LSAT Token Structure
+
+```typescript
+interface LSATToken {
+  macaroon: string;      // Authorization token (caveats: amount, expiry, user)
+  preimageHash: string;  // SHA256 hash linking Lightning ↔ HyperEVM
+  htlcAddress: string;   // HTLC contract address on HyperEVM
+  amountSats: number;    // BTC amount in satoshis
+  amountUsdc: number;    // USDC equivalent at lock time
+  expiry: number;        // Unix timestamp for HTLC timeout
+}
+```
+
+### HTLC Contract (HyperEVM)
+
+```solidity
+contract LightningHTLC {
+    struct Swap {
+        bytes32 hash;           // SHA256(preimage)
+        address recipient;      // User's Hyperliquid address
+        uint256 amount;         // USDC amount
+        uint256 timelock;       // Expiry timestamp
+        bool claimed;
+        bool refunded;
+    }
+    
+    // LiFi Node locks USDC
+    function lock(bytes32 hash, address recipient, uint256 timelock) external;
+    
+    // User claims with preimage revealed from Lightning payment
+    function claim(bytes32 preimage) external;
+    
+    // LiFi Node refunds if user doesn't claim before timeout
+    function refund(bytes32 hash) external;
+}
+```
+
+### Security Properties
+
+- **Atomic**: Either both legs complete or neither does
+- **Trustless**: No counterparty risk; cryptographic guarantees
+- **Time-bounded**: HTLC expires if user doesn't claim
+- **Non-custodial**: LiFi never holds user funds without hash commitment
+
 ## Live Transactions
 
 Proof of working funding flows:
