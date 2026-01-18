@@ -127,15 +127,15 @@ export function AuthStatusIndicator() {
             ? `Status: ${config.label}`
             : `Status: ${config.label}. Click to complete authentication.`
         }
-        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors
+        className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium border transition-colors whitespace-nowrap
           ${config.bgColor} ${config.borderColor} ${config.color}
           ${isReadyToTrade ? "cursor-default" : "cursor-pointer hover:opacity-80"}`}
       >
-        <span className="flex items-center gap-2">
+        <span className="flex items-center gap-1.5 sm:gap-2">
           {config.isComplete ? (
             <CheckmarkIcon className={config.color} />
           ) : (
-            <span className={`w-2 h-2 rounded-full ${config.dotColor}`} />
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${config.dotColor}`} />
           )}
           {displayLabel}
         </span>
