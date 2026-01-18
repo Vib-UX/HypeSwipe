@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAccount } from 'wagmi';
 import { Header } from '@/components/Header';
@@ -8,6 +8,13 @@ import { SwipeCard } from '@/components/SwipeCard';
 import { useUserStore } from '@/store/userStore';
 import { useMarkets } from '@/hooks/useMarkets';
 import type { TradeCard, PearMarket, MarketMetrics, AITradeIdea, SentimentData } from '@/types/trade';
+
+type TradeStatus = 'idle' | 'executing' | 'success' | 'error';
+
+interface TradeResult {
+  status: TradeStatus;
+  message?: string;
+}
 
 const SIZE_OPTIONS = [5, 7, 10] as const;
 const AI_BATCH_SIZE = 6;
@@ -109,6 +116,7 @@ export default function SwipePage() {
   const router = useRouter();
   const { isConnected } = useAccount();
   const getAuthStatus = useUserStore((state) => state.getAuthStatus);
+  const pearAccessToken = useUserStore((state) => state.pearAccessToken);
   const authStatus = getAuthStatus(isConnected);
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -117,6 +125,8 @@ export default function SwipePage() {
   const [tradesWithCandles, setTradesWithCandles] = useState<TradeCard[]>([]);
   const [processedMarketIds, setProcessedMarketIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
+  const [tradeResult, setTradeResult] = useState<TradeResult>({ status: 'idle' });
+  const [isExecuting, setIsExecuting] = useState(false);
 
   const {
     data: marketsData,
@@ -243,9 +253,63 @@ export default function SwipePage() {
     processNewMarkets();
   }, [allMarkets, processedMarketIds, isProcessing]);
 
-  const handleSwipe = (direction: 'left' | 'right') => {
-    if (direction === 'right') {
-      setStats((prev) => ({ ...prev, taken: prev.taken + 1 }));
+  const executePosition = useCallback(async (trade: TradeCard) => {
+    if (!pearAccessToken) {
+      setTradeResult({ status: 'error', message: 'Not authenticated' });
+      return false;
+    }
+
+    setIsExecuting(true);
+    setTradeResult({ status: 'executing' });
+
+    try {
+      const response = await fetch('/api/positions/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${pearAccessToken}`,
+        },
+        body: JSON.stringify({
+          longAssets: trade.longAssets || [],
+          shortAssets: trade.shortAssets || [],
+          usdValue: size,
+          leverage: trade.leverage,
+          direction: trade.direction,
+          positionType: trade.positionType || 'one_directional',
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setTradeResult({ status: 'error', message: result.error || 'Trade failed' });
+        return false;
+      }
+
+      setTradeResult({ status: 'success', message: `Order ${result.orderId}` });
+      return true;
+    } catch (error) {
+      console.error('Trade execution error:', error);
+      setTradeResult({ status: 'error', message: 'Trade failed' });
+      return false;
+    } finally {
+      setIsExecuting(false);
+      // Clear result after 3 seconds
+      setTimeout(() => setTradeResult({ status: 'idle' }), 3000);
+    }
+  }, [pearAccessToken, size]);
+
+  const handleSwipe = async (direction: 'left' | 'right') => {
+    const currentTrade = remainingTrades[0];
+
+    if (direction === 'right' && currentTrade) {
+      const success = await executePosition(currentTrade);
+      if (success) {
+        setStats((prev) => ({ ...prev, taken: prev.taken + 1 }));
+      } else {
+        // Still count as attempted even if failed
+        setStats((prev) => ({ ...prev, taken: prev.taken + 1 }));
+      }
     } else {
       setStats((prev) => ({ ...prev, skipped: prev.skipped + 1 }));
     }
@@ -295,6 +359,19 @@ export default function SwipePage() {
       <Header />
 
       <main className="flex-1 flex flex-col max-w-md mx-auto w-full px-4 py-6">
+        {/* Trade result toast */}
+        {tradeResult.status !== 'idle' && (
+          <div className={`mb-4 px-4 py-2 rounded-lg text-center text-sm font-medium ${
+            tradeResult.status === 'executing' ? 'bg-yellow-500/20 text-yellow-400' :
+            tradeResult.status === 'success' ? 'bg-green-500/20 text-green-400' :
+            'bg-red-500/20 text-red-400'
+          }`}>
+            {tradeResult.status === 'executing' ? 'Executing trade...' :
+             tradeResult.status === 'success' ? `Trade executed!` :
+             tradeResult.message || 'Trade failed'}
+          </div>
+        )}
+
         {/* Stats bar */}
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
@@ -375,7 +452,8 @@ export default function SwipePage() {
           <div className="flex justify-center gap-6 mt-4">
             <button
               onClick={() => handleSwipe('left')}
-              className="w-16 h-16 rounded-full bg-dark-800 border-2 border-red-500/50 flex items-center justify-center text-red-400 hover:bg-red-500/20 transition-colors"
+              disabled={isExecuting}
+              className="w-16 h-16 rounded-full bg-dark-800 border-2 border-red-500/50 flex items-center justify-center text-red-400 hover:bg-red-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -383,11 +461,16 @@ export default function SwipePage() {
             </button>
             <button
               onClick={() => handleSwipe('right')}
-              className="w-16 h-16 rounded-full bg-dark-800 border-2 border-green-500/50 flex items-center justify-center text-green-400 hover:bg-green-500/20 transition-colors"
+              disabled={isExecuting}
+              className="w-16 h-16 rounded-full bg-dark-800 border-2 border-green-500/50 flex items-center justify-center text-green-400 hover:bg-green-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              {isExecuting ? (
+                <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
             </button>
           </div>
         )}
