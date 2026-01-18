@@ -32,44 +32,52 @@ HypeSwipe flips this:
 
 - **Frontend**: Next.js 14, TypeScript, TailwindCSS
 - **Execution**: Hyperliquid via Peer Protocol
-- **Funding**: Native BTC + Lightning → USDC
-- **Bridging**: Li.Fi for BTC → Hyperliquid USDC
+- **Funding**: Native BTC, Lightning, Arbitrum USDC
+- **Bridging**: Li.Fi Widget for cross-chain swaps
 
 ## Funding Options
 
-### 1. Native BTC (Xverse)
-- Connect Xverse wallet
+### 1. Lightning Network (Alby)
+- Connect Alby wallet via WebLN
+- Pay Lightning invoice instantly
+- USDC credited to trading account
+- **~15 second settlement**
+
+### 2. Native BTC (Li.Fi Widget)
+- Connect BTC wallet (Xverse, etc.)
 - Send BTC on-chain
-- Auto-bridged to USDC via Li.Fi
-- ~20 minute settlement
+- Auto-bridged to Hyperliquid USDC via Li.Fi
+- **~20 minute settlement**
 
-### 2. Lightning (Alby) - Coming Soon
-- Pay Lightning invoice
-- LSAT tokens minted on HyperEVM
-- Instant swap to USDC
-- ~15 second settlement
+### 3. Arbitrum USDC (Li.Fi Widget)
+- Connect MetaMask on Arbitrum
+- Bridge USDC directly to Hyperliquid L1
+- One-click deposit to perps account
+- **~2 minute settlement**
 
-## Progress
+## Live Transactions
 
-**Done:**
+Proof of working funding flows:
+
+| Method | Transaction | Explorer |
+|--------|-------------|----------|
+| Lightning | 10 sats deposit | [Alby WebLN] |
+| Arbitrum → Hyperliquid | 2.44 USDC bridge | [Arbiscan](https://arbiscan.io/tx/0xb793382502c5d5b63ef714fa1b1d3dbbe044ef1b5710bd1ef17cf68655b48822) |
+| Bitcoin (on-chain) | SegWit + Taproot | [Mempool](https://mempool.space/tx/f6bf9f1b67729c5cd7dd526700c3714cca9a5f6bd079f2e54d58c8945d0cab3a) |
+
+## Features
+
 - [x] EVM wallet connection (MetaMask)
 - [x] BTC wallet connection (Xverse)
-- [x] Li.Fi BTC → USDC bridging
-- [x] Hyperliquid chain support
-- [x] Auto-quote fetching
-- [x] Balance tracking
-
-**Building:**
-- [ ] Lightning integration (LSAT/USDC pool)
-- [ ] Swipe card UI
-- [ ] AI position generation
-- [ ] Peer Protocol integration
-
-**Next:**
-- [ ] Mobile gestures
-- [ ] Position tracking
-- [ ] P&L visualization
-- [ ] Social features
+- [x] Lightning wallet connection (Alby/WebLN)
+- [x] Li.Fi Widget integration
+- [x] Arbitrum USDC → Hyperliquid L1 bridging
+- [x] Native BTC → Hyperliquid USDC bridging
+- [x] Lightning instant deposits
+- [x] Hyperliquid balance tracking (spot + perps)
+- [x] Real-time vault balance updates
+- [x] Swipe card UI with charts
+- [x] AI market signal generation
 
 ## Quick Start
 
@@ -79,10 +87,13 @@ npm install
 
 # Set up environment
 cp frontend/.env.example frontend/.env.local
-# Add your LIFI_API_KEY
+# Add your NEXT_PUBLIC_LIFI_API_KEY
 
 # Run development server
 npm run dev
+
+# Run Lightning backend (optional)
+cd backend && npm run dev
 ```
 
 ## API Routes
@@ -90,26 +101,33 @@ npm run dev
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/vault` | GET | Get user's USDC balance |
-| `/api/vault/credit` | POST | Credit USDC to user (dev) |
+| `/api/vault/credit` | POST | Credit USDC to user |
 | `/api/lifi/quote-btc-to-usdc` | POST | Get BTC → USDC quote |
+| `/api/lightning/create-invoice` | POST | Create Lightning invoice |
+| `/api/lightning/verify-payment` | POST | Verify Lightning payment |
+| `/api/ai/market-signal` | POST | Generate AI trading signal |
 
 ## Architecture
 
 ```
 User
   │
-  ├─ Native BTC ──→ Xverse ──→ Li.Fi Bridge ──→ Hyperliquid USDC
-  │                              (~20 min)
+  ├─ Lightning ──→ Alby/WebLN ──→ Invoice ──→ Verify ──→ Credit USDC
+  │                                (~15 sec)
   │
-  └─ Lightning ──→ Alby ──→ LSAT Mint ──→ DEX Swap ──→ Hyperliquid USDC
-                            (~15 sec)
+  ├─ Native BTC ──→ Li.Fi Widget ──→ Bridge ──→ Hyperliquid USDC
+  │                                  (~20 min)
+  │
+  └─ Arbitrum USDC ──→ Li.Fi Widget ──→ Relay ──→ Hyperliquid L1 Perps
+                                        (~2 min)
 ```
 
 ## Links
 
 - [Hyperliquid Docs](https://hyperliquid.gitbook.io/)
+- [Li.Fi Widget](https://docs.li.fi/widget/overview)
 - [Li.Fi API](https://docs.li.fi/)
-- [Peer Protocol](https://docs.pear.garden/)
+- [Alby WebLN](https://guides.getalby.com/developer-guide/v/alby-wallet-api-and-oauth/reference/webln-reference)
 
 ---
 

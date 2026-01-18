@@ -12,12 +12,12 @@ const LIFI_API_KEY = process.env.NEXT_PUBLIC_LIFI_API_KEY || '86b53fc5-b71d-4a5a
 // Chain IDs
 const BTC_CHAIN_ID = 20000000000001; // Li.Fi's BTC chain ID
 const ARBITRUM_CHAIN_ID = 42161;
-const HYPERLIQUID_CHAIN_ID = 1337;
+const HYPERLIQUID_CHAIN_ID = 1337; // Hyperliquid L1 (perps/spot) chain ID
 
 // Token addresses
 const BTC_TOKEN = 'bitcoin';
-const ARBITRUM_USDC = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
-const HYPERLIQUID_USDC = '0x6d1e7cde53bA9467B783Cb7c530CE05400000000';
+const ARBITRUM_USDC = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'; // Native USDC on Arbitrum
+const HYPERLIQUID_USDC_PERPS = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'; // USDC (Perps) on Hyperliquid - 6 decimals
 
 export type WidgetSourceType = 'btc' | 'arbitrum' | 'any';
 
@@ -48,7 +48,6 @@ function WidgetEventHandler({
       console.log('[LiFi] Route execution completed:', route.id);
       console.log('[LiFi] Received amount:', route.toAmountMin);
       
-      // Credit the vault with the received USDC amount
       if (onSwapComplete) {
         onSwapComplete(route);
       }
@@ -84,8 +83,8 @@ export function LifiSwapWidget({
     // Credit vault with the received USDC
     if (address && route.toAmountMin) {
       try {
-        // Hyperliquid USDC has 8 decimals
-        const amountUsdc = parseFloat(route.toAmountMin) / 1e8;
+        // Hyperliquid USDC (Perps) has 6 decimals
+        const amountUsdc = parseFloat(route.toAmountMin) / 1e6;
         
         const response = await fetch('/api/vault/credit', {
           method: 'POST',
@@ -109,77 +108,58 @@ export function LifiSwapWidget({
     }
   }, [address, onSwapComplete]);
 
-  // Configure based on source type
-  const getChainConfig = () => {
+  // Get default chain/token based on source type
+  const getDefaults = () => {
     switch (sourceType) {
       case 'btc':
         return {
           fromChain: BTC_CHAIN_ID,
           fromToken: BTC_TOKEN,
-          allowedChains: [BTC_CHAIN_ID, HYPERLIQUID_CHAIN_ID],
-          allowedTokens: [
-            { chainId: BTC_CHAIN_ID, address: BTC_TOKEN },
-            { chainId: HYPERLIQUID_CHAIN_ID, address: HYPERLIQUID_USDC },
-          ],
+          fromAmount: defaultAmount ? parseFloat(defaultAmount) : 0.0001,
         };
       case 'arbitrum':
         return {
           fromChain: ARBITRUM_CHAIN_ID,
           fromToken: ARBITRUM_USDC,
-          allowedChains: [ARBITRUM_CHAIN_ID, HYPERLIQUID_CHAIN_ID],
-          allowedTokens: [
-            { chainId: ARBITRUM_CHAIN_ID, address: ARBITRUM_USDC },
-            { chainId: HYPERLIQUID_CHAIN_ID, address: HYPERLIQUID_USDC },
-          ],
+          fromAmount: defaultAmount ? parseFloat(defaultAmount) : 10, // 10 USDC default
         };
-      default: // 'any' - allow BTC, Arbitrum, and other common chains
+      default:
         return {
-          fromChain: BTC_CHAIN_ID,
-          fromToken: BTC_TOKEN,
-          allowedChains: [BTC_CHAIN_ID, ARBITRUM_CHAIN_ID, 1, HYPERLIQUID_CHAIN_ID], // BTC, Arbitrum, Ethereum, Hyperliquid
-          allowedTokens: [
-            { chainId: BTC_CHAIN_ID, address: BTC_TOKEN },
-            { chainId: ARBITRUM_CHAIN_ID, address: ARBITRUM_USDC },
-            { chainId: 1, address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' }, // ETH USDC
-            { chainId: HYPERLIQUID_CHAIN_ID, address: HYPERLIQUID_USDC },
-          ],
+          fromChain: undefined, // Let user choose
+          fromToken: undefined,
+          fromAmount: defaultAmount ? parseFloat(defaultAmount) : 10,
         };
     }
   };
 
-  const chainConfig = getChainConfig();
+  const defaults = getDefaults();
 
+  // Widget configuration - simplified per Li.Fi docs
+  // https://docs.li.fi/widget/configure-widget
   const widgetConfig: Partial<WidgetConfig> = {
-    // API Key for authenticated requests (avoids rate limits)
+    // API Key for authenticated requests
     apiKey: LIFI_API_KEY,
     
-    // Pre-configure source and destination
-    fromChain: chainConfig.fromChain,
+    // Pre-select source chain/token (if specified)
+    ...(defaults.fromChain && { fromChain: defaults.fromChain }),
+    ...(defaults.fromToken && { fromToken: defaults.fromToken }),
+    fromAmount: defaults.fromAmount,
+    
+    // Pre-select destination: Hyperliquid L1 Perps
     toChain: HYPERLIQUID_CHAIN_ID,
-    fromToken: chainConfig.fromToken,
-    toToken: HYPERLIQUID_USDC,
+    toToken: HYPERLIQUID_USDC_PERPS,
     
-    // Default amount - 0.0001 BTC
-    fromAmount: defaultAmount || '0.0001',
-    
-    // Appearance settings
+    // Appearance
     appearance: 'dark',
+    variant: 'compact',
+    
+    // Hide certain UI elements
     hiddenUI: ['appearance', 'language', 'poweredBy'],
     
-    // Chain restrictions
-    chains: {
-      allow: chainConfig.allowedChains,
-    },
+    // Slippage setting
+    slippage: 0.005, // 0.5%
     
-    // Token restrictions  
-    tokens: {
-      allow: chainConfig.allowedTokens,
-    },
-    
-    // Slippage settings
-    slippage: 0.005, // 0.5% default slippage
-    
-    // Theme customization to match HypeSwipe dark theme
+    // Theme customization
     theme: {
       container: {
         border: '1px solid #2a2d36',
@@ -187,7 +167,7 @@ export function LifiSwapWidget({
         boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4)',
       },
       palette: {
-        primary: { main: '#f7931a' }, // Bitcoin orange
+        primary: { main: '#f7931a' },
         secondary: { main: '#3b82f6' },
         background: {
           paper: '#1a1d24',
@@ -200,23 +180,12 @@ export function LifiSwapWidget({
       },
     },
     
-    // Widget variant
-    variant: 'compact',
-    
-    // Wallet configuration
-    // - EVM: Uses wagmi/MetaMask (connected externally)
-    // - BTC: Widget shows "Connect BTC Wallet" for Xverse/other BTC wallets
+    // Wallet config - use external wagmi for EVM, widget handles BTC
     walletConfig: {
-      // Use partial management - EVM wallets from wagmi, BTC wallets from widget
       usePartialWalletManagement: true,
     },
     
-    // Bridge settings - allow all for best routing
-    bridges: {
-      allow: ['relay', 'chainflip', 'thorswap', 'symbiosis'],
-    },
-    
-    // Show route details and build explorer URLs
+    // Enable URL building for tracking
     buildUrl: true,
   };
 
