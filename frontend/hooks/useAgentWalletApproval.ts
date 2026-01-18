@@ -2,11 +2,7 @@
 
 import { useState, useRef, useMemo } from "react";
 import { useAccount, useWalletClient } from "wagmi";
-import {
-  createAgentWallet,
-  getAgentWallet,
-  PearApiException,
-} from "@/lib/pear-api";
+import { createAgentWallet, getAccountSummary } from "@/lib/pear-api";
 import { useUserStore } from "@/store/userStore";
 import { useToast } from "@/providers/ToastProvider";
 import { HyperliquidSDK } from "@/lib/hyperliquid";
@@ -51,35 +47,24 @@ export function useAgentWalletApproval() {
     }
 
     try {
-      const walletResponse = await getAgentWallet();
+      const account = await getAccountSummary();
 
-      if (!walletResponse.agentWalletAddress) {
-        setAgentWalletApproved(false, null);
-        return { hasAgentWallet: false };
+      if (account.agentWalletAddress) {
+        setAgentWalletApproved(true, account.agentWalletAddress);
+        return {
+          hasAgentWallet: true,
+          agentWalletAddress: account.agentWalletAddress,
+        };
       }
 
-      setAgentWalletApproved(true, walletResponse.agentWalletAddress);
-
-      return {
-        hasAgentWallet: true,
-        agentWalletAddress: walletResponse.agentWalletAddress,
-      };
+      setAgentWalletApproved(false, null);
+      return { hasAgentWallet: false };
     } catch (error) {
-      if (error instanceof PearApiException && error.statusCode === 404) {
-        setAgentWalletApproved(false, null);
-        return { hasAgentWallet: false };
-      }
-
-      console.error("Failed to check agent wallet status:", error);
+      console.error("Failed to check account status:", error);
       return { hasAgentWallet: false };
     }
   };
 
-  /**
-   * Approve agent wallet.
-   * First checks if wallet already exists in Pear (already approved).
-   * Only prompts for signature if creating a new wallet.
-   */
   const approveAgent = async (): Promise<AgentWalletApprovalResult> => {
     if (approvalInProgress.current || isApproving) {
       return { success: false, error: "Approval already in progress" };
@@ -104,21 +89,12 @@ export function useAgentWalletApproval() {
     setIsApproving(true);
 
     try {
-      try {
-        const walletResponse = await getAgentWallet();
+      const account = await getAccountSummary();
 
-        if (walletResponse.agentWalletAddress) {
-          setAgentWalletApproved(true, walletResponse.agentWalletAddress);
-          showToast("Agent wallet already set up!", "success", 3000);
-          return {
-            success: true,
-            agentWalletAddress: walletResponse.agentWalletAddress,
-          };
-        }
-      } catch (error) {
-        if (!(error instanceof PearApiException && error.statusCode === 404)) {
-          throw error;
-        }
+      if (account.agentWalletAddress) {
+        setAgentWalletApproved(true, account.agentWalletAddress);
+        showToast("Agent wallet already set up!", "success", 3000);
+        return { success: true, agentWalletAddress: account.agentWalletAddress };
       }
 
       showToast("Creating agent wallet...", "success", 0);
@@ -134,12 +110,8 @@ export function useAgentWalletApproval() {
 
       const result = await hyperliquid.approveAgent(agentWalletAddress);
 
-      if (!result) {
-        throw new Error("No result from approval");
-      }
-
-      if (result.status === "err") {
-        throw new Error(result.response || "Approval failed");
+      if (!result || result.status === "err") {
+        throw new Error(result?.response || "Approval failed");
       }
 
       showToast("Agent wallet approved successfully!", "success", 5000);

@@ -82,8 +82,9 @@ export default function AuthPage() {
       ) {
         hasCheckedStatusOnLoad.current = true;
 
-        await checkMaxBuilderFee();
+        setHasVerifiedStatus(false);
 
+        await checkMaxBuilderFee();
         await checkAgentWalletStatus();
 
         setHasVerifiedStatus(true);

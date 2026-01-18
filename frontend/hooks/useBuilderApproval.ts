@@ -16,7 +16,7 @@ export interface BuilderApprovalResult {
 export function useBuilderApproval() {
   const { address, chainId } = useAccount();
   const { data: walletClient, isLoading: isWalletLoading } = useWalletClient();
-  const { setBuilderApproved, builderCodeApproved } = useUserStore();
+  const { setBuilderApproved } = useUserStore();
   const { showToast } = useToast();
   const [isApproving, setIsApproving] = useState(false);
   const approvalInProgress = useRef(false);

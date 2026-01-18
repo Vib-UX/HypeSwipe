@@ -236,3 +236,23 @@ export async function createAgentWallet() {
     true
   );
 }
+
+export interface AccountSummary {
+  agentWalletAddress: string | null;
+  totalClosedTrades: number;
+  totalTriggerOrderUsdValue: number;
+  totalTwapChunkUsdValue: number;
+  lastSyncedAt: number | null;
+}
+
+/**
+ * Get account summary including agent wallet status.
+ * This is the single source of truth for user setup status.
+ */
+export async function getAccountSummary() {
+  return pearApiRequest<AccountSummary>(
+    '/accounts',
+    { method: 'GET' },
+    true
+  );
+}
