@@ -10,6 +10,7 @@ import { useMarkets } from '@/hooks/useMarkets';
 import type { TradeCard, PearMarket, MarketMetrics, AITradeIdea, SentimentData } from '@/types/trade';
 
 const SIZE_OPTIONS = [5, 7, 10] as const;
+const AI_BATCH_SIZE = 6;
 
 const DEFAULT_SENTIMENT: SentimentData = {
   bullish: 50,
@@ -153,13 +154,15 @@ export default function SwipePage() {
   useEffect(() => {
     async function processNewMarkets() {
       // Find markets we haven't processed yet
-      const newMarkets = allMarkets.filter(
+      const unprocessedMarkets = allMarkets.filter(
         (m, i) => !processedMarketIds.has(`${m.displayName}-${i}`)
       );
 
-      if (newMarkets.length === 0 || isProcessing) {
+      if (unprocessedMarkets.length === 0 || isProcessing) {
         return;
       }
+
+      const newMarkets = unprocessedMarkets.slice(0, AI_BATCH_SIZE);
 
       setIsProcessing(true);
 

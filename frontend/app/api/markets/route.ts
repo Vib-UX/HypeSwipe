@@ -3,7 +3,7 @@ import { detectPositionType, generateDisplayName } from "@/lib/market-utils";
 import type { PearMarket, MarketAsset } from "@/types/trade";
 
 const PEAR_API_BASE_URL = "https://hl-v2.pearprotocol.io";
-const DEFAULT_PAGE_SIZE = 5;
+const DEFAULT_PAGE_SIZE = 6;
 
 interface RawPearMarket {
   name: string;

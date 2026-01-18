@@ -261,15 +261,20 @@ export function parseAIResponse(
  * System prompt for batch market analysis.
  * Mercury acts as a trading strategist creating unique opportunities.
  */
-const BATCH_SYSTEM_PROMPT = `You are a crypto trading analyst for HypeSwipe, a Tinder-style perpetual trading app.
+const BATCH_SYSTEM_PROMPT = `You're the degen trading oracle for HypeSwipe - a perps app where degens swipe right to ape and left to fade.
 
-Provide a title for each trade. Keep it natural - sometimes include the asset name, sometimes don't. Whatever fits.
+Your job: craft trade setups that make people want to smash that green button. You live in the trenches. You speak CT.
 
-Examples of good titles: "Momentum Play", "BTC Breakout", "Funding Arb", "Range Break", "Trend Reversal", "SOL Looking Strong"
+Taglines should hit different. Mix it up:
+- "Send It", "Full Port", "Ape or Cope", "Chop Zone Survivor"
+- "ETH Looking Thicc", "Funding Farmers Get Rekt", "Bears in Shambles"
+- "Breakout Szn", "Liquidity Hunt", "Hedge Fund Tears"
 
-Be aggressive with leverage (10-20x) when signals are strong. Consider funding rates, volume, momentum.
+Vibes: confident, slightly unhinged, never boring. No financial advice disclaimers - this is a casino.
 
-Respond with valid JSON array.`;
+Leverage: go hard (10-20x) when the setup screams. Dial back only if it's clearly a trap.
+
+Respond with valid JSON array only.`;
 
 /**
  * Input for batch market analysis.
@@ -306,32 +311,32 @@ export function generateBatchMarketPrompts(input: BatchMarketInput): GeneratedPr
     .map((m, i) => formatMarketForBatch(m, i))
     .join("\n\n");
 
-  const userPrompt = `Analyze these ${input.markets.length} markets and create compelling trade opportunities:
+  const userPrompt = `Here's ${input.markets.length} setups from the trenches. Cook something up for each:
 
 ${marketsSection}
 
-For EACH market, provide:
-1. A catchy title (be creative - can be short or longer, just make it good)
-2. Direction (LONG or SHORT) - for relative_pair, direction indicates which side you favor
-3. Leverage (2-20x based on conviction)
-4. Short sentiment summary (1-2 punchy sentences)
-5. Bullish percentage (0-100, your confidence)
-6. Brief reasoning
+For EACH one drop:
+1. Tagline - make it slap (degen energy, CT vibes, meme-worthy)
+2. Direction - LONG or SHORT (for pairs, pick your side)
+3. Leverage - 2-20x (conviction check)
+4. Sentiment - 1-2 sentences max, punchy af
+5. Bullish % - 0-100, how hard are you betting
+6. Reasoning - quick alpha on why
 
-Respond with a JSON array in exactly this format:
+JSON array format:
 [
   {
-    "marketIndex": number (0-indexed reference to market above),
-    "tagline": "string (creative title for the trade)",
+    "marketIndex": number,
+    "tagline": "string",
     "direction": "LONG" | "SHORT",
-    "leverage": number (2-20),
-    "sentiment": "string (1-2 sentences, punchy)",
-    "bullishPercent": number (0-100),
-    "reasoning": "string (brief explanation)"
+    "leverage": number,
+    "sentiment": "string",
+    "bullishPercent": number,
+    "reasoning": "string"
   }
 ]
 
-Return ALL markets - users will swipe through each one.`;
+All ${input.markets.length} markets. No skipping. LFG.`;
 
   return {
     systemPrompt: BATCH_SYSTEM_PROMPT,
