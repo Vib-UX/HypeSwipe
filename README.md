@@ -34,8 +34,8 @@ Proof of working funding flows:
 ### Bitcoin On-Chain Transaction
 <img width="800" alt="Bitcoin Transaction" src="https://github.com/user-attachments/assets/9c21caa1-c27c-4895-9e08-b7843951f2b4" />
 
-### Peer API HyperCore
-<img width="800" alt="Peer API" src="https://github.com/user-attachments/assets/d3db8b27-8beb-4da0-98a6-15952ddea262" />
+### Pear Protocol APIs
+<img width="800" alt="Pear Protocol" src="https://github.com/user-attachments/assets/d3db8b27-8beb-4da0-98a6-15952ddea262" />
 
 ## Why?
 
@@ -53,7 +53,7 @@ HypeSwipe flips this:
 ## Tech Stack
 
 - **Frontend**: Next.js 14, TypeScript, TailwindCSS
-- **Execution**: Hyperliquid via Peer Protocol
+- **Execution**: Hyperliquid via Pear Protocol
 - **Funding**: Native BTC, Lightning, Arbitrum USDC
 - **Bridging**: Li.Fi Widget for cross-chain swaps
 
