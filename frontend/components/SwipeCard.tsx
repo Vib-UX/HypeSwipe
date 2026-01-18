@@ -154,11 +154,11 @@ function CardHeader({ trade }: { trade: TradeCard }) {
     return (
       <div className="flex items-center gap-3">
         <div className="relative w-10 h-10">
-          <div className="absolute top-0 left-0 w-7 h-7 rounded-full bg-green-500/20 border border-green-500/30 flex items-center justify-center overflow-hidden">
-            <CryptoIcon symbol={trade.longAssets[0].asset} size={18} className="text-green-400" />
+          <div className="absolute top-0 left-0 w-7 h-7 flex items-center justify-center overflow-hidden">
+            <CryptoIcon symbol={trade.longAssets[0].asset} size={25} className="text-green-400" />
           </div>
-          <div className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-red-500/20 border border-red-500/30 flex items-center justify-center overflow-hidden">
-            <CryptoIcon symbol={trade.shortAssets[0].asset} size={18} className="text-red-400" />
+          <div className="absolute bottom-0 right-0 w-7 h-7 flex items-center justify-center overflow-hidden">
+            <CryptoIcon symbol={trade.shortAssets[0].asset} size={25} className="text-red-400" />
           </div>
         </div>
         <div className="flex-1 min-w-0">
@@ -177,7 +177,7 @@ function CardHeader({ trade }: { trade: TradeCard }) {
           ? 'bg-green-500/20 border border-green-500/30'
           : 'bg-red-500/20 border border-red-500/30'
       }`}>
-        <CryptoIcon symbol={primaryAsset} size={24} className={isLong ? 'text-green-400' : 'text-red-400'} />
+        <CryptoIcon symbol={primaryAsset} size={30} className={isLong ? 'text-green-400' : 'text-red-400'} />
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="font-bold text-lg text-white truncate">{trade.tagline}</h3>
