@@ -1,14 +1,26 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useAccount } from 'wagmi';
+import { useQueryClient } from '@tanstack/react-query';
 import { Header } from '@/components/Header';
 import { BalanceCard } from '@/components/BalanceCard';
-import { BtcDepositModal } from '@/components/BtcDepositModal';
+import { FundModal } from '@/components/FundModal';
+import { SwapModal } from '@/components/SwapModal';
 
 export default function HomePage() {
-  const { isConnected } = useAccount();
-  const [showDepositModal, setShowDepositModal] = useState(false);
+  const { address } = useAccount();
+  const queryClient = useQueryClient();
+  const [showFundModal, setShowFundModal] = useState(false);
+  const [showBridgeModal, setShowBridgeModal] = useState(false);
+
+  // Refresh balance after deposit/swap completes
+  const handleComplete = useCallback(() => {
+    if (address) {
+      queryClient.invalidateQueries({ queryKey: ['vault', address.toLowerCase()] });
+      queryClient.invalidateQueries({ queryKey: ['hyperliquid-balance', address.toLowerCase()] });
+    }
+  }, [address, queryClient]);
 
   return (
     <div className="min-h-screen">
@@ -20,7 +32,8 @@ export default function HomePage() {
           {/* Left Column - Balance */}
           <div>
             <BalanceCard 
-              onDeposit={() => setShowDepositModal(true)}
+              onDeposit={() => setShowFundModal(true)}
+              onBridgeUsdc={() => setShowBridgeModal(true)}
             />
           </div>
 
@@ -129,10 +142,19 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* Modals */}
-      <BtcDepositModal 
-        isOpen={showDepositModal} 
-        onClose={() => setShowDepositModal(false)} 
+      {/* Fund Modal - Native BTC or Lightning */}
+      <FundModal
+        isOpen={showFundModal}
+        onClose={() => setShowFundModal(false)}
+        onComplete={handleComplete}
+      />
+      
+      {/* Bridge Modal - Arbitrum USDC */}
+      <SwapModal
+        isOpen={showBridgeModal}
+        onClose={() => setShowBridgeModal(false)}
+        onSwapComplete={handleComplete}
+        sourceType="arbitrum"
       />
     </div>
   );
