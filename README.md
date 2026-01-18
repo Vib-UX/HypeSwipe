@@ -35,7 +35,8 @@ Proof of working funding flows:
 <img width="800" alt="Bitcoin Transaction" src="https://github.com/user-attachments/assets/9c21caa1-c27c-4895-9e08-b7843951f2b4" />
 
 ### Pear Protocol APIs
-<img width="800" alt="Pear Protocol" src="https://github.com/user-attachments/assets/d3db8b27-8beb-4da0-98a6-15952ddea262" />
+<img width="800" alt="Pear Protocol" src="https://github.com/user-attachments/assets/7ffe1558-1c10-44cc-90d0-887ec01192cd" />
+<img width="800" alt="Pear Protocol API" src="https://github.com/user-attachments/assets/62ecf8e4-f14f-48eb-8d2c-5aa126ebcded" />
 
 ## Why?
 
@@ -63,6 +64,7 @@ HypeSwipe flips this:
 - Connect Alby wallet via WebLN
 - Pay Lightning invoice instantly
 - USDC credited to trading account
+- Custom LiFi External adapter
 - **~15 second settlement**
 
 ### 2. Native BTC (Li.Fi Widget)
