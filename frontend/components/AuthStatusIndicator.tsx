@@ -92,7 +92,6 @@ export function AuthStatusIndicator() {
   const { isConnected, address } = useAccount();
   const { disconnect } = useDisconnect();
   const getAuthStatus = useUserStore((state) => state.getAuthStatus);
-  const resetPearAuth = useUserStore((state) => state.resetPearAuth);
 
   const authStatus = getAuthStatus(isConnected);
   const config = STATUS_CONFIG[authStatus];
@@ -114,7 +113,6 @@ export function AuthStatusIndicator() {
   const handleDisconnect = (e: React.MouseEvent) => {
     e.stopPropagation();
     disconnect();
-    resetPearAuth();
   };
 
   return (
@@ -135,7 +133,9 @@ export function AuthStatusIndicator() {
           {config.isComplete ? (
             <CheckmarkIcon className={config.color} />
           ) : (
-            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${config.dotColor}`} />
+            <span
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${config.dotColor}`}
+            />
           )}
           {displayLabel}
         </span>
