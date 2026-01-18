@@ -16,7 +16,7 @@ interface TradeResult {
   message?: string;
 }
 
-const SIZE_OPTIONS = [5, 7, 10] as const;
+const SIZE_OPTIONS = [12, 15, 20] as const;
 const AI_BATCH_SIZE = 6;
 
 const DEFAULT_SENTIMENT: SentimentData = {
@@ -121,7 +121,7 @@ export default function SwipePage() {
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [stats, setStats] = useState({ taken: 0, skipped: 0 });
-  const [size, setSize] = useState<number>(10);
+  const [size, setSize] = useState<number>(12);
   const [tradesWithCandles, setTradesWithCandles] = useState<TradeCard[]>([]);
   const [processedMarketIds, setProcessedMarketIds] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
