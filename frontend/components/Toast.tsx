@@ -66,7 +66,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-3 max-h-screen overflow-y-auto">
+    <div className="fixed top-4 right-4 z-50 flex flex-col gap-3 max-h-[calc(100vh-2rem)] overflow-hidden pr-1">
       {toasts.map((toast) => (
         <ToastComponent
           key={toast.id}

@@ -85,11 +85,8 @@ export function useBuilderApproval() {
 
       if (currentFee > 0) {
         setBuilderApproved(true);
-        showToast("Builder code already approved!", "success", 3000);
         return { success: true };
       }
-
-      showToast("Please sign to approve builder code...", "success", 0);
 
       const res = await hyperliquid.approveBuilderFee(
         BUILDER_CODE_ADDRESS,
@@ -100,7 +97,6 @@ export function useBuilderApproval() {
         throw new Error(res.response || "Approval failed");
       }
 
-      showToast("Builder code approved successfully!", "success", 5000);
       setBuilderApproved(true);
 
       return { success: true };

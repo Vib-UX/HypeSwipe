@@ -24,8 +24,6 @@ export function usePearLogin() {
     }
 
     try {
-      showToast('Authenticating...', 'success', 0);
-
       const eip712Data = await getEip712Message(address, clientId) as any;
 
       const { signature, timestamp } = await signEip712Message(eip712Data);
@@ -38,8 +36,6 @@ export function usePearLogin() {
       ) as any;
 
       setPearTokens(authResponse.accessToken, authResponse.refreshToken);
-
-      showToast('Authentication successful!', 'success', 5000);
 
       return { success: true };
     } catch (error) {

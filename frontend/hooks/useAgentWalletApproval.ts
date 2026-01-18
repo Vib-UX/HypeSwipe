@@ -93,11 +93,9 @@ export function useAgentWalletApproval() {
 
       if (account.agentWalletAddress) {
         setAgentWalletApproved(true, account.agentWalletAddress);
-        showToast("Agent wallet already set up!", "success", 3000);
         return { success: true, agentWalletAddress: account.agentWalletAddress };
       }
 
-      showToast("Creating agent wallet...", "success", 0);
       const createResponse = await createAgentWallet();
 
       if (!createResponse.agentWalletAddress) {
@@ -106,15 +104,12 @@ export function useAgentWalletApproval() {
 
       const agentWalletAddress = createResponse.agentWalletAddress;
 
-      showToast("Please sign to approve agent wallet...", "success", 0);
-
       const result = await hyperliquid.approveAgent(agentWalletAddress);
 
       if (!result || result.status === "err") {
         throw new Error(result?.response || "Approval failed");
       }
 
-      showToast("Agent wallet approved successfully!", "success", 5000);
       setAgentWalletApproved(true, agentWalletAddress);
 
       return { success: true, agentWalletAddress };
