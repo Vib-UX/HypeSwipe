@@ -101,18 +101,20 @@ async function fetchHyperliquidBalance(address: string): Promise<HyperliquidBala
   }
 
   // Extract perps account value (already in USDC)
-  let perpsAccountValue = 0;
+  let perpsAccountUSDCBalance = 0;
   let perpsWithdrawable = 0;
   if (perpsState) {
-    perpsAccountValue = parseFloat(perpsState.marginSummary?.accountValue || perpsState.accountValue || '0');
+    const accountValue = parseFloat(perpsState.marginSummary?.accountValue || perpsState.accountValue || '0');
+    const totalMarginUsed = parseFloat(perpsState.marginSummary?.totalMarginUsed || '0');
+    perpsAccountUSDCBalance = accountValue - totalMarginUsed;
     perpsWithdrawable = parseFloat(perpsState.withdrawable || '0');
   }
 
   return {
     spotUsdc,
-    perpsAccountValue,
+    perpsAccountValue: perpsAccountUSDCBalance,
     perpsWithdrawable,
-    totalUsdc: spotUsdc + perpsAccountValue,
+    totalUsdc: spotUsdc + perpsAccountUSDCBalance,
   };
 }
 
