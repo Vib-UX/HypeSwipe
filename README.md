@@ -93,6 +93,13 @@ HypeSwipe flips this:
 - [x] Swipe card UI with charts
 - [x] AI market signal generation
 
+## Prerequisites
+
+Before using HypeSwipe, you need:
+
+1. **Hyperliquid Account** — Create an account at [app.hyperliquid.xyz/portfolio](https://app.hyperliquid.xyz/portfolio)
+2. **Arbitrum Network** — Set your wallet to the Arbitrum chain for bridging USDC to Hyperliquid
+
 ## Quick Start
 
 ```bash
