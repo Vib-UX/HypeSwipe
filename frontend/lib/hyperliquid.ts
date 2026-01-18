@@ -1,12 +1,6 @@
 import { WalletClient } from "viem";
 import { ExchangeClient, InfoClient, HttpTransport } from "@nktkas/hyperliquid";
 
-export interface ExtraAgent {
-  address: `0x${string}`;
-  name: string;
-  validUntil: number;
-}
-
 export class HyperliquidSDK {
   private infoClient: InfoClient;
   private exchangeClient?: ExchangeClient;
@@ -49,29 +43,22 @@ export class HyperliquidSDK {
   }
 
   /**
-   * Gets the list of extra agents (approved agent wallets) for a user.
-   * @param user The user's address.
-   * @returns Array of extra agent details including address, name, and validity period.
+   * Approves an agent wallet for trading on behalf of the user.
+   * @param agentAddress The agent wallet address to approve.
+   * @param agentName Optional name for the agent (default: null for unnamed).
+   * @returns The result of the approval.
    */
-  async getExtraAgents(user: string): Promise<ExtraAgent[]> {
-    return this.infoClient.extraAgents({ user: user as `0x${string}` });
-  }
-
-  /**
-   * Checks if a specific agent wallet is approved for a user.
-   * @param user The user's address.
-   * @param agentAddress The agent wallet address to check.
-   * @returns True if the agent is approved and valid, false otherwise.
-   */
-  async isAgentApproved(user: string, agentAddress: string): Promise<boolean> {
-    const agents = await this.getExtraAgents(user);
-    const normalizedAgentAddress = agentAddress.toLowerCase();
-    const now = Date.now();
-
-    return agents.some(
-      (agent) =>
-        agent.address.toLowerCase() === normalizedAgentAddress &&
-        agent.validUntil > now
-    );
+  async approveAgent(
+    agentAddress: string,
+    agentName?: string | null,
+  ): Promise<{ status: string; response: any }> {
+    if (!this.exchangeClient) {
+      throw new Error("Wallet not provided. Cannot approve agent.");
+    }
+    const result = await this.exchangeClient.approveAgent({
+      agentAddress: agentAddress as `0x${string}`,
+      agentName: agentName ?? null,
+    });
+    return result;
   }
 }

@@ -232,7 +232,7 @@ export async function getAgentWallet() {
 export async function createAgentWallet() {
   return pearApiRequest<{ agentWalletAddress: string }>(
     '/agentWallet',
-    { method: 'POST' },
+    { method: 'POST', body: JSON.stringify({}) },
     true
   );
 }

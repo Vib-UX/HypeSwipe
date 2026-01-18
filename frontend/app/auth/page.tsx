@@ -32,11 +32,13 @@ export default function AuthPage() {
     approveBuilder,
     isApproving: isBuilderApproving,
     checkMaxBuilderFee,
+    isWalletReady: isBuilderWalletReady,
   } = useBuilderApproval();
   const {
     approveAgent: approveAgentWallet,
     isApproving: isAgentApproving,
     checkAgentWalletStatus,
+    isWalletReady: isAgentWalletReady,
   } = useAgentWalletApproval();
 
   const [currentStep, setCurrentStep] = useState<StepNumber>(1);
@@ -57,15 +59,21 @@ export default function AuthPage() {
   const hasAutoTriggeredBuilder = useRef(false);
   const hasAutoTriggeredAgent = useRef(false);
   const hasCheckedStatusOnLoad = useRef(false);
+  const [hasVerifiedStatus, setHasVerifiedStatus] = useState(false);
 
   useEffect(() => {
-    if (authStatus === "ready_to_trade") {
+    if (hasVerifiedStatus && authStatus === "ready_to_trade") {
       router.push("/");
     }
-  }, [authStatus, router]);
+  }, [authStatus, router, hasVerifiedStatus]);
 
   useEffect(() => {
     const checkStatusOnLoad = async () => {
+      if (isConnected && !pearAccessToken) {
+        setHasVerifiedStatus(true);
+        return;
+      }
+
       if (
         isConnected &&
         address &&
@@ -77,6 +85,8 @@ export default function AuthPage() {
         await checkMaxBuilderFee();
 
         await checkAgentWalletStatus();
+
+        setHasVerifiedStatus(true);
       }
     };
 
@@ -91,12 +101,15 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (isConnected && address) {
-      setCurrentStep(2);
-      if (authStatus === "authenticated" && !builderCodeApproved) {
-        setCurrentStep(3);
+      if (authStatus === "ready_to_trade") {
+        return;
       }
       if (builderCodeApproved && !agentWalletApproved) {
         setCurrentStep(4);
+      } else if (authStatus === "authenticated" && !builderCodeApproved) {
+        setCurrentStep(3);
+      } else if (!pearAccessToken) {
+        setCurrentStep(2);
       }
     } else {
       setCurrentStep(1);
@@ -111,6 +124,7 @@ export default function AuthPage() {
     authStatus,
     builderCodeApproved,
     agentWalletApproved,
+    pearAccessToken,
   ]);
 
   const handleConnect = async () => {
@@ -161,25 +175,41 @@ export default function AuthPage() {
   };
 
   useEffect(() => {
-    if (currentStep === 2 && !hasAutoTriggeredAuth.current) {
+    if (
+      currentStep === 2 &&
+      !hasAutoTriggeredAuth.current &&
+      !pearAccessToken
+    ) {
       hasAutoTriggeredAuth.current = true;
       handleAuthenticate();
     }
-  }, [currentStep]);
+  }, [currentStep, pearAccessToken]);
 
   useEffect(() => {
-    if (currentStep === 3 && authStatus === 'authenticated' && !hasAutoTriggeredBuilder.current) {
+    if (
+      hasVerifiedStatus &&
+      currentStep === 3 &&
+      authStatus === "authenticated" &&
+      isBuilderWalletReady &&
+      !hasAutoTriggeredBuilder.current
+    ) {
       hasAutoTriggeredBuilder.current = true;
       handleApproveBuilder();
     }
-  }, [currentStep, authStatus]);
+  }, [hasVerifiedStatus, currentStep, authStatus, isBuilderWalletReady]);
 
   useEffect(() => {
-    if (currentStep === 4 && builderCodeApproved && !hasAutoTriggeredAgent.current) {
+    if (
+      hasVerifiedStatus &&
+      currentStep === 4 &&
+      builderCodeApproved &&
+      isAgentWalletReady &&
+      !hasAutoTriggeredAgent.current
+    ) {
       hasAutoTriggeredAgent.current = true;
       handleApproveAgentWallet();
     }
-  }, [currentStep, builderCodeApproved]);
+  }, [hasVerifiedStatus, currentStep, builderCodeApproved, isAgentWalletReady]);
 
   const renderStepContent = () => {
     switch (currentStep) {

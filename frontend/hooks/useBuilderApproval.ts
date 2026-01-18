@@ -1,9 +1,10 @@
 "use client";
 
-import { useAccount } from "wagmi";
+import { useState, useRef, useMemo } from "react";
+import { useAccount, useWalletClient } from "wagmi";
 import { useUserStore } from "@/store/userStore";
 import { useToast } from "@/providers/ToastProvider";
-import { useHyperliquid } from "@/hooks/useHyperliquid";
+import { HyperliquidSDK } from "@/lib/hyperliquid";
 
 const BUILDER_CODE_ADDRESS = "0xA47D4d99191db54A4829cdf3de2417E527c3b042";
 
@@ -13,10 +14,16 @@ export interface BuilderApprovalResult {
 }
 
 export function useBuilderApproval() {
-  const hyperliquid = useHyperliquid();
   const { address, chainId } = useAccount();
-  const { setBuilderApproved } = useUserStore();
+  const { data: walletClient, isLoading: isWalletLoading } = useWalletClient();
+  const { setBuilderApproved, builderCodeApproved } = useUserStore();
   const { showToast } = useToast();
+  const [isApproving, setIsApproving] = useState(false);
+  const approvalInProgress = useRef(false);
+
+  const hyperliquid = useMemo(() => {
+    return new HyperliquidSDK(walletClient ?? undefined);
+  }, [walletClient]);
 
   const checkMaxBuilderFee = async (): Promise<{
     isApproved: boolean;
@@ -33,7 +40,6 @@ export function useBuilderApproval() {
       );
 
       const isApproved = res > 0;
-
       setBuilderApproved(isApproved);
 
       return { isApproved, currentMaxFee: res };
@@ -43,31 +49,58 @@ export function useBuilderApproval() {
     }
   };
 
+  /**
+   * Approve builder fee.
+   * First checks if already approved on Hyperliquid.
+   * Only prompts for signature if not yet approved.
+   */
   const approveBuilder = async (): Promise<BuilderApprovalResult> => {
+    if (approvalInProgress.current || isApproving) {
+      return { success: false, error: "Approval already in progress" };
+    }
+
     if (!address) {
       showToast("Please connect your wallet first", "error");
       return { success: false, error: "Wallet not connected" };
     }
 
-    if (chainId !== 1) {
-      showToast("Please switch to Ethereum Mainnet", "error");
+    if (chainId !== 1 && chainId !== 42161) {
+      showToast("Please switch to Ethereum or Arbitrum", "error");
       return { success: false, error: "Wrong network" };
     }
 
+    if (!walletClient) {
+      showToast("Wallet not ready. Please try again.", "error");
+      return { success: false, error: "Wallet client not ready" };
+    }
+
+    approvalInProgress.current = true;
+    setIsApproving(true);
+
     try {
-      showToast("Approving builder code...", "success", 0);
+      const currentFee = await hyperliquid.getMaxBuilderFee(
+        address,
+        BUILDER_CODE_ADDRESS,
+      );
+
+      if (currentFee > 0) {
+        setBuilderApproved(true);
+        showToast("Builder code already approved!", "success", 3000);
+        return { success: true };
+      }
+
+      showToast("Please sign to approve builder code...", "success", 0);
 
       const res = await hyperliquid.approveBuilderFee(
         BUILDER_CODE_ADDRESS,
         "0.01%",
       );
 
-      if (res.status == "err") {
+      if (res.status === "err") {
         throw new Error(res.response || "Approval failed");
       }
 
       showToast("Builder code approved successfully!", "success", 5000);
-
       setBuilderApproved(true);
 
       return { success: true };
@@ -85,14 +118,19 @@ export function useBuilderApproval() {
       }
 
       return { success: false, error: errorMessage };
+    } finally {
+      approvalInProgress.current = false;
+      setIsApproving(false);
     }
   };
 
   return {
     approveBuilder,
     checkMaxBuilderFee,
-    isApproving: false,
+    isApproving,
+    isWalletReady: !!walletClient && !isWalletLoading,
     builderCodeAddress: BUILDER_CODE_ADDRESS,
-    canApprove: !!address && chainId === 1,
+    canApprove:
+      !!address && !!walletClient && (chainId === 1 || chainId === 42161),
   };
 }
